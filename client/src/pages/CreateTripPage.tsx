@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
+import { useAuthStore } from '../store/authStore';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -14,7 +15,13 @@ export const CreateTripPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { createTrip } = useTripStore();
+  const { user } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const isAdmin = user ? ['test@test.com', 'dorfbl@gmail.com'].includes(user.email) : false;
+    if (user && !isAdmin) navigate('/', { replace: true });
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

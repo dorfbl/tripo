@@ -22,6 +22,7 @@ export const DashboardPage: React.FC = () => {
   const { trips, loadTrips, isLoading } = useTripStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const isAdmin = user ? ['test@test.com', 'dorfbl@gmail.com'].includes(user.email) : false;
   const [inviteCode, setInviteCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [joining, setJoining] = useState(false);
@@ -54,9 +55,11 @@ export const DashboardPage: React.FC = () => {
         <h1 className="text-xl font-bold text-neutral-900">
           הטיולים שלי
         </h1>
-        <Button onClick={() => navigate('/create-trip')} size="sm">
-          + טיול חדש
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => navigate('/create-trip')} size="sm">
+            + טיול חדש
+          </Button>
+        )}
       </div>
 
       {/* הצטרפות דרך קוד */}
@@ -83,10 +86,16 @@ export const DashboardPage: React.FC = () => {
         <div className="text-center py-12">
           <div className="text-5xl mb-4">🗺️</div>
           <p className="text-neutral-600 font-medium">אין לך טיולים עדיין</p>
-          <p className="text-neutral-400 text-sm mt-1">צור טיול חדש או הצטרף לאחד</p>
-          <Button className="mt-4" onClick={() => navigate('/create-trip')}>
-            צור טיול ראשון
-          </Button>
+          {isAdmin ? (
+            <>
+              <p className="text-neutral-400 text-sm mt-1">צור טיול חדש או הצטרף לאחד</p>
+              <Button className="mt-4" onClick={() => navigate('/create-trip')}>
+                צור טיול ראשון
+              </Button>
+            </>
+          ) : (
+            <p className="text-neutral-400 text-sm mt-1">הצטרף לטיול עם קוד הזמנה</p>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">

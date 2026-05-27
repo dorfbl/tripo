@@ -2,9 +2,18 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
+const ADMIN_EMAILS = ['test@test.com', 'dorfbl@gmail.com'];
+
 export const createTrip = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, startDate, endDate } = req.body;
+
+    // רק מנהלי מערכת יכולים ליצור טיולים
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user || !ADMIN_EMAILS.includes(user.email)) {
+      res.status(403).json({ error: 'רק מנהלי מערכת יכולים ליצור טיולים חדשים' });
+      return;
+    }
 
     if (!name) {
       res.status(400).json({ error: 'שם הטיול הוא שדה חובה' });
