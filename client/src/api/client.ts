@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// baseURL ריק = relative URLs (/api/...)
+// בפיתוח: Vite proxy מנתב /api → localhost:3018
+// בייצור: nginx reverse proxy מנתב /api → server
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+  baseURL: '',
   headers: { 'Content-Type': 'application/json' },
 });
 

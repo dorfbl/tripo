@@ -8,8 +8,25 @@ import destinationsRoutes from './routes/destinations.routes';
 
 const app = express();
 
+// נדרש כשעובדים מאחורי reverse proxy (nginx)
+app.set('trust proxy', 1);
+
+const allowedOrigins = [
+  'https://trip.kefar-sava.co.il',
+  'http://localhost:5173',  // פיתוח מקומי
+  'http://localhost:3018',
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // allow requests with no origin (server-to-server, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: origin not allowed — ${origin}`));
+    }
+  },
   credentials: true,
 }));
 

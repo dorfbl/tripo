@@ -25,9 +25,10 @@ export default defineConfig({
     }),
   ],
   server: {
+    // proxy רק בפיתוח מקומי — בייצור nginx מנתב /api → server
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:3018',
+        target: 'http://localhost:3018',
         changeOrigin: true,
       },
     },
