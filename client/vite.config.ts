@@ -25,6 +25,7 @@ export default defineConfig({
     }),
   ],
   server: {
+    allowedHosts: ['trip.kefar-sava.co.il', 'localhost'],
     // proxy רק בפיתוח מקומי — בייצור nginx מנתב /api → server
     proxy: {
       '/api': {
