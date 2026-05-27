@@ -55,15 +55,20 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, value, onC
   }
 
   if (question.type === 'SCALE') {
-    const scaleValue = (value as number) || 3;
-    const leftLabel = question.options?.[0] || '';
-    const rightLabel = question.options?.[4] || '';
+    const scaleValue = (value as number) || 0;
+    // options[0] = תווית לערך 1 (נמוך), options[4] = תווית לערך 5 (גבוה)
+    const lowLabel  = question.options?.[0] || '';
+    const highLabel = question.options?.[4] || '';
     return (
-      <div>
+      // dir="ltr" כדי שמספרים תמיד יוצגו 1→5 משמאל לימין (מספרים נקראים LTR גם בעברית)
+      <div dir="ltr">
+        {/* תוויות: 1=שמאל, 5=ימין */}
         <div className="flex justify-between text-xs text-neutral-500 mb-3">
-          <span>{rightLabel}</span>
-          <span>{leftLabel}</span>
+          <span dir="rtl" className="max-w-[40%] text-right">{lowLabel}</span>
+          <span dir="rtl" className="max-w-[40%] text-left">{highLabel}</span>
         </div>
+
+        {/* כפתורי סקאלה 1→5 משמאל לימין */}
         <div className="flex gap-2 justify-center">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
@@ -79,12 +84,14 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, value, onC
             </button>
           ))}
         </div>
-        <div className="flex justify-between text-xs text-neutral-400 mt-2">
-          <span>5</span>
-          <span>4</span>
-          <span>3</span>
-          <span>2</span>
+
+        {/* תוויות מספריות תחת הכפתורים */}
+        <div className="flex justify-between text-xs text-neutral-400 mt-1 px-1">
           <span>1</span>
+          <span>2</span>
+          <span>3</span>
+          <span>4</span>
+          <span>5</span>
         </div>
       </div>
     );
