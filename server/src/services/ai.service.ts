@@ -28,42 +28,32 @@ export async function generateDestinations(
   const formattedAnswers = membersAnswers
     .map(
       (member, idx) =>
-        `חבר [אנונימי ${idx + 1}]:\n` +
-        member.answers.map((a) => `- ${a.question}: ${a.answer}`).join('\n')
+        `חבר ${idx + 1}:\n` +
+        member.answers.map((a) => `${a.question}: ${a.answer}`).join(' | ')
     )
-    .join('\n\n');
+    .join('\n');
 
-  const systemPrompt = `אתה עוזר לתכנון טיולים קבוצתיים. תפקידך לנתח את תשובות כל חברי הקבוצה ולהציע 3-4 יעדי טיול שמתאימים לקבוצה כולה — תוך איזון בין העדפות שונות.
+  const systemPrompt = `אתה מומחה לתכנון טיולים קבוצתיים. נתח תשובות קבוצה והצע 3 יעדים מאוזנים.
 
-חוקים:
-- הצע בדיוק 3 או 4 יעדים
-- לכל יעד: שם, מדינה, תיאור כללי (2-3 משפטים), למה הוא מתאים לקבוצה הזו ספציפית, ציון התאמה (0-100), מזג אוויר, ו-3-5 דגשים כלליים
-- הדגשים הם כלליים בלבד — "חופים יפים", "תרבות עשירה", "אוכל מדהים" — לא לוח זמנים
-- השב בעברית
-- השב בפורמט JSON בלבד, ללא טקסט נוסף`;
+כללים:
+- בדיוק 3 יעדים
+- תיאור: משפט אחד קצר
+- whyItFits: 2 משפטים קצרים על ההתאמה לקבוצה
+- matchScore: מספר 0-100
+- climate: 3-5 מילים
+- highlights: בדיוק 3 פריטים קצרים (2-4 מילים כל אחד)
+- JSON בלבד, ללא טקסט נוסף`;
 
-  const userPrompt = `להלן תשובות ${membersAnswers.length} חברי הקבוצה לשאלון:
+  const userPrompt = `תשובות ${membersAnswers.length} חברים:
 
 ${formattedAnswers}
 
-הצע 3-4 יעדים מתאימים. החזר JSON במבנה הבא:
-{
-  "destinations": [
-    {
-      "name": "שם היעד",
-      "country": "מדינה",
-      "description": "תיאור כללי",
-      "whyItFits": "למה זה מתאים לקבוצה הזו",
-      "matchScore": 85,
-      "climate": "תיאור מזג אוויר",
-      "highlights": ["דגש 1", "דגש 2", "דגש 3"]
-    }
-  ]
-}`;
+החזר JSON:
+{"destinations":[{"name":"...","country":"...","description":"...","whyItFits":"...","matchScore":80,"climate":"...","highlights":["...","...","..."]}]}`;
 
   const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2048,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2000,
     messages: [{ role: 'user', content: userPrompt }],
     system: systemPrompt,
   });
@@ -73,12 +63,33 @@ ${formattedAnswers}
     throw new Error('תגובה לא צפויה מ-AI');
   }
 
-  // נסה לחלץ JSON מהתגובה
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // נקה markdown code blocks
+  let raw = content.text
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+
+  const start = raw.indexOf('{');
+  const end   = raw.lastIndexOf('}');
+  if (start === -1 || end === -1) {
+    console.error('AI raw response (no JSON found):\n', raw);
     throw new Error('לא ניתן לנתח את תגובת ה-AI');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
-  return parsed.destinations as DestinationSuggestion[];
+  raw = raw.slice(start, end + 1);
+
+  let parsed: { destinations: DestinationSuggestion[] };
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    console.error('JSON parse failed. stop_reason:', (message as { stop_reason?: string }).stop_reason);
+    console.error('Raw JSON:\n', raw);
+    throw new Error('תגובת ה-AI לא בפורמט JSON תקין');
+  }
+
+  if (!parsed.destinations || parsed.destinations.length === 0) {
+    throw new Error('ה-AI לא החזיר יעדים');
+  }
+
+  return parsed.destinations;
 }
