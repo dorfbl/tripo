@@ -60,15 +60,22 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, value, onC
     const lowLabel  = question.options?.[0] || '';
     const highLabel = question.options?.[4] || '';
     return (
-      // dir="ltr" כדי שמספרים תמיד יוצגו 1→5 משמאל לימין (מספרים נקראים LTR גם בעברית)
       <div dir="ltr">
-        {/* תוויות: 1=שמאל, 5=ימין */}
-        <div className="flex justify-between text-xs text-neutral-500 mb-3">
-          <span dir="rtl" className="max-w-[40%] text-right">{lowLabel}</span>
-          <span dir="rtl" className="max-w-[40%] text-left">{highLabel}</span>
+        {/* שורת מידע: ערך 1 משמאל, ערך 5 מימין */}
+        <div className="flex justify-between items-start gap-2 mb-4 text-xs">
+          <div className="flex items-center gap-1.5 bg-neutral-100 rounded-lg px-2.5 py-1.5">
+            <span className="font-bold text-neutral-500">1</span>
+            <span className="text-neutral-500">=</span>
+            <span dir="rtl" className="text-neutral-700 font-medium">{lowLabel}</span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-neutral-100 rounded-lg px-2.5 py-1.5">
+            <span dir="rtl" className="text-neutral-700 font-medium">{highLabel}</span>
+            <span className="text-neutral-500">=</span>
+            <span className="font-bold text-neutral-500">5</span>
+          </div>
         </div>
 
-        {/* כפתורי סקאלה 1→5 משמאל לימין */}
+        {/* כפתורי סקאלה 1→5 */}
         <div className="flex gap-2 justify-center">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
@@ -83,15 +90,6 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({ question, value, onC
               {n}
             </button>
           ))}
-        </div>
-
-        {/* תוויות מספריות תחת הכפתורים */}
-        <div className="flex justify-between text-xs text-neutral-400 mt-1 px-1">
-          <span>1</span>
-          <span>2</span>
-          <span>3</span>
-          <span>4</span>
-          <span>5</span>
         </div>
       </div>
     );
