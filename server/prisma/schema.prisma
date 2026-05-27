@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  trips        TripMember[]
+  answers      QuestionAnswer[]
+  votes        DestinationVote[]
+}
+
+model Trip {
+  id          String     @id @default(uuid())
+  name        String
+  startDate   DateTime?
+  endDate     DateTime?
+  status      TripStatus @default(PLANNING)
+  inviteCode  String     @unique @default(uuid())
+  createdAt   DateTime   @default(now())
+
+  members      TripMember[]
+  destinations SuggestedDestination[]
+}
+
+enum TripStatus {
+  PLANNING
+  VOTING
+  BOOKED
+  ONGOING
+  COMPLETED
+}
+
+model TripMember {
+  id          String     @id @default(uuid())
+  userId      String
+  tripId      String
+  role        MemberRole @default(MEMBER)
+  joinedAt    DateTime   @default(now())
+  completedQuestionnaire Boolean @default(false)
+
+  user        User     @relation(fields: [userId], references: [id])
+  trip        Trip     @relation(fields: [tripId], references: [id])
+
+  @@unique([userId, tripId])
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+model Question {
+  id          String       @id @default(uuid())
+  text        String       @unique
+  category    String
+  type        QuestionType
+  order       Int
+  options     Json?
+  isActive    Boolean      @default(true)
+
+  answers     QuestionAnswer[]
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  SCALE
+  TEXT
+}
+
+model QuestionAnswer {
+  id         String   @id @default(uuid())
+  userId     String
+  tripId     String
+  questionId String
+  answer     Json
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+  question   Question @relation(fields: [questionId], references: [id])
+
+  @@unique([userId, tripId, questionId])
+}
+
+model SuggestedDestination {
+  id          String   @id @default(uuid())
+  tripId      String
+  name        String
+  country     String
+  description String
+  whyItFits   String
+  matchScore  Float
+  climate     String?
+  highlights  Json
+  createdAt   DateTime @default(now())
+
+  trip        Trip     @relation(fields: [tripId], references: [id])
+  votes       DestinationVote[]
+}
+
+model DestinationVote {
+  id            String   @id @default(uuid())
+  destinationId String
+  userId        String
+  score         Int
+  createdAt     DateTime @default(now())
+
+  destination   SuggestedDestination @relation(fields: [destinationId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@unique([destinationId, userId])
+}
