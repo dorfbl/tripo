@@ -10,7 +10,7 @@ export const Navbar: React.FC = () => {
     <header className="bg-white border-b border-neutral-200 sticky top-0 z-50">
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link to="/" className="font-bold text-brand-500 text-lg tracking-tight">
-          ✈️ TripTogether
+          ✈️ TRIPO
         </Link>
 
         <nav className="flex items-center gap-3">
