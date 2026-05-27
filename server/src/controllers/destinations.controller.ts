@@ -79,7 +79,13 @@ export const generate = async (req: AuthRequest, res: Response): Promise<void> =
       data: { status: 'VOTING' },
     });
 
-    res.json({ destinations: saved });
+    const destinationsWithVotes = await prisma.suggestedDestination.findMany({
+      where: { tripId },
+      include: { votes: { select: { userId: true, score: true } } },
+      orderBy: { matchScore: 'desc' },
+    });
+
+    res.json({ destinations: destinationsWithVotes });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בייצור המלצות' });

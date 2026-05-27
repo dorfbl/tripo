@@ -16,9 +16,10 @@ export const DestinationCard: React.FC<DestinationCardProps> = ({ destination, o
   const [voting, setVoting] = useState(false);
   const [hoverScore, setHoverScore] = useState(0);
 
-  const myVote = destination.votes.find((v) => v.userId === user?.id)?.score ?? 0;
-  const avgVote = destination.votes.length > 0
-    ? (destination.votes.reduce((s, v) => s + v.score, 0) / destination.votes.length).toFixed(1)
+  const votes = destination.votes ?? [];
+  const myVote = votes.find((v) => v.userId === user?.id)?.score ?? 0;
+  const avgVote = votes.length > 0
+    ? (votes.reduce((s, v) => s + v.score, 0) / votes.length).toFixed(1)
     : null;
 
   const matchColor = destination.matchScore >= 80 ? 'green' : destination.matchScore >= 60 ? 'yellow' : 'gray';
@@ -94,7 +95,7 @@ export const DestinationCard: React.FC<DestinationCardProps> = ({ destination, o
             <div className="text-left">
               <p className="text-xs text-neutral-400">ממוצע קבוצה</p>
               <p className="text-lg font-bold text-neutral-900">⭐ {avgVote}</p>
-              <p className="text-xs text-neutral-400">{destination.votes.length} הצבעות</p>
+              <p className="text-xs text-neutral-400">{votes.length} הצבעות</p>
             </div>
           )}
         </div>
