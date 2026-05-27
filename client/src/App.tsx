@@ -10,6 +10,7 @@ import { TripPage } from './pages/TripPage';
 import { QuestionnairePage } from './pages/QuestionnairePage';
 import { DestinationsPage } from './pages/DestinationsPage';
 import { JoinPage } from './pages/JoinPage';
+import { AdminQuestionsPage } from './pages/AdminQuestionsPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token } = useAuthStore();
@@ -45,6 +46,10 @@ export const App: React.FC = () => {
         } />
         <Route path="/trip/:id/destinations" element={
           <ProtectedRoute><DestinationsPage /></ProtectedRoute>
+        } />
+
+        <Route path="/admin/questions" element={
+          <ProtectedRoute><AdminQuestionsPage /></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/" replace />} />

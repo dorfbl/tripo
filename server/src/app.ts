@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.routes';
 import tripsRoutes from './routes/trips.routes';
 import questionnaireRoutes from './routes/questionnaire.routes';
 import destinationsRoutes from './routes/destinations.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripsRoutes);
 app.use('/api/questionnaire', questionnaireRoutes);
 app.use('/api/destinations', destinationsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
