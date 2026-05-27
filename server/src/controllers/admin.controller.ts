@@ -2,11 +2,11 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
-const ADMIN_EMAIL = 'dorfbl@gmail.com';
+const ADMIN_EMAILS = ['test@test.com', 'dorfbl@gmail.com'];
 
 async function requireAdmin(req: AuthRequest, res: Response): Promise<boolean> {
   const user = await prisma.user.findUnique({ where: { id: req.userId! } });
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (!user || !ADMIN_EMAILS.includes(user.email)) {
     res.status(403).json({ error: 'גישה מורשית למנהלים בלבד' });
     return false;
   }

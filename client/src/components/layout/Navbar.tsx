@@ -24,7 +24,7 @@ export const Navbar: React.FC = () => {
                   הטיולים שלי
                 </Link>
               )}
-              {user.email === 'dorfbl@gmail.com' && (
+              {['test@test.com', 'dorfbl@gmail.com'].includes(user.email) && (
                 <Link
                   to="/admin/questions"
                   className={`text-sm transition-colors ${

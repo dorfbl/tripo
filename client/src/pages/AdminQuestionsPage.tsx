@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import apiClient from '../api/client';
 import type { Question } from '../types';
 
-const ADMIN_EMAIL = 'dorfbl@gmail.com';
+const ADMIN_EMAILS = ['test@test.com', 'dorfbl@gmail.com'];
 
 const TYPE_LABELS: Record<string, string> = {
   SINGLE_CHOICE: 'בחירה יחידה',
@@ -79,7 +79,7 @@ export const AdminQuestionsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = user ? ADMIN_EMAILS.includes(user.email) : false;
 
   useEffect(() => {
     if (!isAdmin) { navigate('/'); return; }
