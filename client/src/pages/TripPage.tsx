@@ -147,6 +147,7 @@ export const TripPage: React.FC = () => {
       {/* פעולות */}
       {currentTrip.status === 'PLANNING' && (
         <div className="flex flex-col gap-3">
+          {/* כפתור שאלון — לכולם שלא מילאו */}
           {!myCompleted && (
             <Button
               size="lg"
@@ -157,40 +158,70 @@ export const TripPage: React.FC = () => {
             </Button>
           )}
 
-          {myCompleted && (
+          {/* מילאתי — הודעה לפי תפקיד */}
+          {myCompleted && !isAdmin && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700 text-center">
-              ✅ מילאת את השאלון! ממתין לשאר החברים...
+              ✅ מילאת את השאלון!
+              {questStatus && questStatus.completed < questStatus.total
+                ? ` ממתין ל-${questStatus.total - questStatus.completed} חברים נוספים...`
+                : ' המנהל יייצר את ההמלצות בקרוב.'}
             </div>
           )}
 
+          {/* כפתור AI — אדמין בלבד */}
           {isAdmin && questStatus && questStatus.completed > 0 && (
             <div>
               <Button
-                variant="secondary"
                 size="lg"
                 className="w-full"
                 loading={generating}
                 onClick={handleGenerate}
               >
-                🤖 קבל המלצות מ-AI
+                🤖 ייצר המלצות AI
                 {questStatus.completed < questStatus.total && (
-                  <span className="text-xs mr-1 opacity-70">({questStatus.total - questStatus.completed} עדיין לא מילאו)</span>
+                  <span className="text-xs mr-2 opacity-70">
+                    ({questStatus.completed}/{questStatus.total} מילאו)
+                  </span>
                 )}
               </Button>
               {genError && <p className="text-xs text-red-500 mt-1 text-center">{genError}</p>}
+            </div>
+          )}
+
+          {/* אדמין מילא אבל אין תשובות כלל (רק הוא) */}
+          {isAdmin && myCompleted && questStatus && questStatus.completed === 0 && (
+            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-sm text-neutral-500 text-center">
+              ממתין שחברים ימלאו את השאלון לפני ייצור המלצות
             </div>
           )}
         </div>
       )}
 
       {currentTrip.status === 'VOTING' && (
-        <Button
-          size="lg"
-          className="w-full"
-          onClick={() => navigate(`/trip/${id}/destinations`)}
-        >
-          🗳️ לצפות ביעדים ולהצביע
-        </Button>
+        <div className="flex flex-col gap-3">
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={() => navigate(`/trip/${id}/destinations`)}
+          >
+            🗳️ לצפות ביעדים ולהצביע
+          </Button>
+          {/* אדמין יכול לייצר מחדש */}
+          {isAdmin && (
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-neutral-400"
+                loading={generating}
+                onClick={handleGenerate}
+              >
+                🔄 ייצר המלצות מחדש
+              </Button>
+              {genError && <p className="text-xs text-red-500 mt-1 text-center">{genError}</p>}
+            </div>
+          )}
+        </div>
       )}
     </AppShell>
   );

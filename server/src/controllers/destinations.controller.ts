@@ -27,8 +27,8 @@ export const generate = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    if (trip.status !== 'PLANNING') {
-      res.status(400).json({ error: 'ניתן לייצר המלצות רק בשלב התכנון' });
+    if (trip.status !== 'PLANNING' && trip.status !== 'VOTING') {
+      res.status(400).json({ error: 'ניתן לייצר המלצות רק בשלבי תכנון או הצבעה' });
       return;
     }
 

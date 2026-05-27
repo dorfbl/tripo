@@ -33,7 +33,7 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">✈️</div>
-          <h1 className="text-2xl font-bold text-neutral-900">TripTogether</h1>
+          <h1 className="text-2xl font-bold text-neutral-900">Tripo</h1>
           <p className="text-neutral-600 mt-1 text-sm">תכנון טיולים קבוצתיים</p>
         </div>
 
