@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 import {
   getAllQuestions,
   createQuestion,
@@ -10,7 +10,7 @@ import {
 
 const router = Router();
 
-router.use(authMiddleware);
+router.use(authenticateToken);
 
 router.get('/questions', getAllQuestions);
 router.post('/questions', createQuestion);
