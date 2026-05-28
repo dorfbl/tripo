@@ -31,7 +31,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
 
     const token = jwt.sign({ userId: user.id }, config.jwtSecret, {
-      expiresIn: '7d',
+      expiresIn: '365d',
     });
 
     res.status(201).json({
@@ -66,7 +66,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     const token = jwt.sign({ userId: user.id }, config.jwtSecret, {
-      expiresIn: '7d',
+      expiresIn: '365d',
     });
 
     res.json({
