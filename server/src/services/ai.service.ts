@@ -82,13 +82,21 @@ const HEBREW_MONTHS = [
   'יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר',
 ];
 
-function formatTripDates(startDate?: Date, endDate?: Date): string {
-  if (!startDate) return '';
-  const s = `${startDate.getDate()} ${HEBREW_MONTHS[startDate.getMonth()]} ${startDate.getFullYear()}`;
-  if (!endDate) return `תאריך הטיול: ${s}`;
+function formatTripDates(startDate?: Date, endDate?: Date): { str: string; nights: number | null; month: string } {
+  if (!startDate) return { str: '', nights: null, month: '' };
+  const month = HEBREW_MONTHS[startDate.getMonth()];
+  const s = `${startDate.getDate()} ${month} ${startDate.getFullYear()}`;
+  if (!endDate) return { str: s, nights: null, month };
   const e = `${endDate.getDate()} ${HEBREW_MONTHS[endDate.getMonth()]} ${endDate.getFullYear()}`;
   const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86400000);
-  return `${s} עד ${e} (${nights} לילות)`;
+  return { str: `${s} עד ${e}`, nights, month };
+}
+
+function tripScopeHint(nights: number): string {
+  if (nights <= 4)  return `טיול קצר של ${nights} לילות — הצע יעד יחיד או שני יעדים סמוכים בלבד. אל תציע מסלול שדורש יותר מ-${nights} לילות.`;
+  if (nights <= 7)  return `טיול של ${nights} לילות — אפשר לשלב שני יעדים סמוכים, אך לא יותר מ-2 ערים רחוקות זו מזו.`;
+  if (nights <= 12) return `טיול של ${nights} לילות — אפשר לשלב 2-3 יעדים. וודא שהמסלול ריאלי ולא דוחס יותר מדי.`;
+  return `טיול ארוך של ${nights} לילות — אפשר מסלול עשיר עם מספר יעדים.`;
 }
 
 // ─── פונקציה ראשית ──────────────────────────────────────────────────────────
@@ -120,8 +128,8 @@ export async function generateDestinations(
     }
   }
 
-  const tripDatesStr = formatTripDates(tripDates?.startDate, tripDates?.endDate);
-  console.log('[AI] תאריכי טיול:', tripDatesStr || 'לא צוינו');
+  const { str: tripDatesStr, nights: tripNights, month: tripMonth } = formatTripDates(tripDates?.startDate, tripDates?.endDate);
+  console.log('[AI] תאריכי טיול:', tripDatesStr || 'לא צוינו', '| לילות:', tripNights);
   console.log('[AI] אסורים מחברים:', bannedByMembers);
   console.log('[AI] רצויים מחברים:', wantedByMembers);
 
@@ -131,8 +139,12 @@ export async function generateDestinations(
 
   const memberBannedStr = bannedByMembers.length ? bannedByMembers.join(', ') : 'אין';
   const wantedStr       = wantedByMembers.length ? wantedByMembers.join(', ') : 'אין';
-  const datesLine       = tripDatesStr
-    ? `תאריכי הטיול: ${tripDatesStr} — התאם את מזג האוויר לחודש הספציפי הזה!`
+  const datesLine = tripDatesStr
+    ? [
+        `תאריכי הטיול: ${tripDatesStr}${tripNights ? ` (${tripNights} לילות)` : ''}`,
+        tripNights ? tripScopeHint(tripNights) : '',
+        `מזג אוויר: התאם לחודש ${tripMonth} בפועל — לא ממוצע שנתי!`,
+      ].filter(Boolean).join('\n4. ')
     : '';
 
   const systemPrompt = `אתה מומחה לתכנון טיולים קבוצתיים. תפקידך להציע בדיוק 5 יעדים מותאמים (אנחנו מסננים ומציגים את ה-3 הטובים ביותר).
@@ -157,7 +169,7 @@ export async function generateDestinations(
 - description: משפט אחד על המסלול כולו
 - whyItFits: 2 משפטים למה מתאים לקבוצה הזאת
 - matchScore: 0-100
-- climate: מזג אוויר ${tripDatesStr ? `ב${tripDatesStr.split(' עד')[0].split(' ').slice(-2).join(' ')}` : 'בתקופה'} — 3-5 מילים
+- climate: מזג אוויר ב${tripMonth || 'תקופת הטיול'} — 3-5 מילים
 - highlights: בדיוק 3 פריטים קצרים (2-4 מילים)
 - JSON בלבד, ללא טקסט נוסף`;
 
@@ -168,7 +180,8 @@ ${formattedAnswers}
 - האם הוא מופיע ב: ${BANNED_STR}? אם כן — החלף!
 - האם חבר ציין שהוא לא רוצה אליו: ${memberBannedStr}? אם כן — החלף!
 - האם זה אטרקציה בודדת (פארק/תיאטרון/שופינג סנטר)? אם כן — הרחב לאזור שלם!
-${tripDatesStr ? `- האם מזג האוויר ב${tripDatesStr} מתאים? אם לא — החלף!` : ''}
+${tripNights ? `- האם המסלול מתאים ל-${tripNights} לילות? אם הוא דורש יותר זמן — קצר אותו!` : ''}
+${tripDatesStr ? `- האם מזג האוויר ב${tripMonth} מתאים? אם לא — החלף!` : ''}
 
 החזר בדיוק 5 יעדים ב-JSON בלבד:
 {"destinations":[{"name":"...","country":"...","description":"...","whyItFits":"...","matchScore":80,"climate":"...","highlights":["...","...","..."]}, ... (5 סה"כ)]}`;

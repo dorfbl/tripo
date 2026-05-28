@@ -28,7 +28,7 @@ export const DestinationsPage: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">יעדים מומלצים</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">הצבע על היעד שמסקין אותך ביותר</p>
+          <p className="text-sm text-neutral-500 mt-0.5">הצבע על היעד שמסקרן אותך ביותר</p>
         </div>
         <Button variant="ghost" size="sm" onClick={reload}>רענן</Button>
       </div>
