@@ -70,13 +70,7 @@ export const TripPage: React.FC = () => {
   const myCompleted = myMember?.completedQuestionnaire ?? false;
 
   return (
-    <AppShell>
-      <button
-        onClick={() => navigate('/')}
-        className="text-sm text-neutral-500 hover:text-neutral-700 flex items-center gap-1 mb-4"
-      >
-        ← הטיולים שלי
-      </button>
+    <AppShell tripId={id}>
 
       {/* Header */}
       <div className="mb-6">

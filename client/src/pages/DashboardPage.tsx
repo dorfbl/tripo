@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
 import { useAuthStore } from '../store/authStore';
 import { AppShell } from '../components/layout/AppShell';
@@ -21,15 +21,26 @@ const statusLabels: Record<string, { label: string; color: 'blue' | 'green' | 'y
 export const DashboardPage: React.FC = () => {
   const { trips, loadTrips, isLoading } = useTripStore();
   const { user } = useAuthStore();
-  const navigate = useNavigate();
-  const isAdmin = user ? ['test@test.com', 'dorfbl@gmail.com'].includes(user.email) : false;
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const isAdmin   = user ? ['test@test.com', 'dorfbl@gmail.com'].includes(user.email) : false;
   const [inviteCode, setInviteCode] = useState('');
-  const [joinError, setJoinError] = useState('');
-  const [joining, setJoining] = useState(false);
+  const [joinError,  setJoinError]  = useState('');
+  const [joining,    setJoining]    = useState(false);
+
+  // האם הגענו בכוונה לדף הזה (למשל מפרופיל "כל הטיולים שלי")
+  const showDashboard = (location.state as { showDashboard?: boolean })?.showDashboard;
 
   useEffect(() => {
     loadTrips();
   }, []);
+
+  // redirect אוטומטי לטיול הראשון אם לא הגיעו בכוונה לכאן
+  useEffect(() => {
+    if (!isLoading && trips.length > 0 && !showDashboard) {
+      navigate(`/trip/${trips[0].id}`, { replace: true });
+    }
+  }, [isLoading, trips, showDashboard]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();

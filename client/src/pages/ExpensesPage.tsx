@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -297,7 +297,6 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
 // ─── קומפוננט ראשי ────────────────────────────────────────────────────────────
 export const ExpensesPage: React.FC = () => {
   const { id: tripId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { user } = useAuthStore();
 
   const [expenses,    setExpenses]    = useState<Expense[]>([]);
@@ -309,7 +308,6 @@ export const ExpensesPage: React.FC = () => {
   const [editingExpense,setEditingExpense] = useState<Expense | null>(null);
   const [activeTab,     setActiveTab]     = useState<'expenses' | 'settlements'>('expenses');
   const [deleting,    setDeleting]    = useState<string | null>(null);
-  const [tripName,    setTripName]    = useState('');
 
   const load = useCallback(async () => {
     if (!tripId) return;
@@ -325,12 +323,6 @@ export const ExpensesPage: React.FC = () => {
 
   useEffect(() => {
     load();
-    // טען שם טיול
-    if (tripId) {
-      apiClient.get(`/api/trips/${tripId}`)
-        .then(r => setTripName(r.data.trip?.name ?? ''))
-        .catch(() => {});
-    }
   }, [load, tripId]);
 
   const handleSaved = (_exp: Expense) => {
@@ -350,18 +342,11 @@ export const ExpensesPage: React.FC = () => {
   };
 
   if (loading) {
-    return <AppShell><div className="text-center py-12 text-neutral-400">טוען...</div></AppShell>;
+    return <AppShell tripId={tripId}><div className="text-center py-12 text-neutral-400">טוען...</div></AppShell>;
   }
 
   return (
-    <AppShell>
-      {/* Back */}
-      <button
-        onClick={() => navigate(`/trip/${tripId}`)}
-        className="text-sm text-neutral-500 hover:text-neutral-700 flex items-center gap-1 mb-4"
-      >
-        ← {tripName || 'הטיול'}
-      </button>
+    <AppShell tripId={tripId}>
 
       {/* Header */}
       <div className="flex items-start justify-between mb-5">
