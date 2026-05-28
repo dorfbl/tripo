@@ -33,15 +33,53 @@ export async function generateDestinations(
     )
     .join('\n');
 
-  const systemPrompt = `אתה מומחה לתכנון טיולים קבוצתיים. נתח תשובות קבוצה והצע 3 יעדים מאוזנים.
+  // חלץ יעדים אסורים מתשובות החברים
+  const bannedByMembers: string[] = [];
+  for (const member of membersAnswers) {
+    for (const a of member.answers) {
+      if (a.question.includes('לא רוצה אליו בשום פנים')) {
+        const val = a.answer.trim();
+        if (val && val.length > 1) bannedByMembers.push(val);
+      }
+    }
+  }
 
-כללים:
-- בדיוק 3 יעדים
-- תיאור: משפט אחד קצר
-- whyItFits: 2 משפטים קצרים על ההתאמה לקבוצה
+  const ALWAYS_BANNED = [
+    'דובאי', 'איחוד האמירויות', 'UAE', 'Dubai',
+    'מרוקו', 'Morocco',
+    'ירדן', 'Jordan',
+    'מצרים', 'Egypt',
+    'טורקיה', 'Turkey', 'Türkiye',
+    'תוניסיה', 'Tunisia',
+    'לבנון', 'Lebanon',
+    'בחריין', 'Bahrain',
+    'קטר', 'Qatar',
+    'כווית', 'Kuwait',
+    'סעודיה', 'Saudi Arabia',
+    'עומאן', 'Oman',
+  ].join(', ');
+
+  const bannedSection = bannedByMembers.length > 0
+    ? `\nיעדים שנאסרו על ידי חברי הקבוצה (אסור להציע בשום אופן): ${bannedByMembers.join(', ')}`
+    : '';
+
+  const systemPrompt = `אתה מומחה לתכנון טיולים קבוצתיים. תפקידך להציע 3 יעדי טיול חכמים ומותאמים לקבוצה.
+
+כללי חובה — אסור לעבור עליהם:
+1. אל תציע לעולם: ${ALWAYS_BANNED}${bannedSection}
+2. אם חבר ענה על "יעד שאתה לא רוצה" — אסור להציע אותו ואסור להציע יעדים דומים/סמוכים לו
+3. אם חבר ענה על "יעד שתמיד רצית לראות" — תן לכך משקל גבוה מאוד בהחלטה
+
+כללי תוכן:
+- אל תציע רק עיר — הצע מסלולים חכמים: "גיאורגיה: טביליסי + קאזבגי", "קרואטיה + מונטנגרו", "היער השחור + מינכן", "דרום צרפת: ניס + פרובאנס" וכד'
+- שלב אזורים/ערים שמשלימות זו את זו לאותה מדינה/אזור
+- name: שם המסלול (לא רק עיר אחת)
+- country: המדינה/ות הראשיות
+- תיאור: משפט אחד קצר על המסלול כולו
+- whyItFits: 2 משפטים — למה המסלול מתאים לקבוצה הספציפית הזו
 - matchScore: מספר 0-100
 - climate: 3-5 מילים
-- highlights: בדיוק 3 פריטים קצרים (2-4 מילים כל אחד)
+- highlights: בדיוק 3 פריטים קצרים (2-4 מילים כל אחד) שמייצגים את המסלול
 - JSON בלבד, ללא טקסט נוסף`;
 
   const userPrompt = `תשובות ${membersAnswers.length} חברים:
