@@ -32,17 +32,31 @@ export const App: React.FC = () => {
     if (token) loadUser();
   }, []);
 
-  // רענון אוטומטי כשהאפליקציה חוזרת לפוקוס (PWA / tab switch)
+  // רענון אוטומטי כשהאפליקציה חוזרת לפוקוס
   useEffect(() => {
     if (!token) return;
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        loadTrips();
-        if (currentTripIdRef.current) loadTrip(currentTripIdRef.current);
-      }
+
+    const refresh = () => {
+      loadTrips();
+      if (currentTripIdRef.current) loadTrip(currentTripIdRef.current);
     };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+
+    // visibilitychange — Chrome/Android + רוב הדפדפנים
+    document.addEventListener('visibilitychange', onVisibility);
+    // focus — fallback ל-iOS PWA שלא תמיד מפעיל visibilitychange
+    window.addEventListener('focus', refresh);
+    // pageshow — כשהדף מגיע מה-bfcache (back/forward navigation)
+    window.addEventListener('pageshow', refresh);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+    };
   }, [token]);
 
   return (

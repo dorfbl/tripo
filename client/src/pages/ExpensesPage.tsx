@@ -358,6 +358,17 @@ export const ExpensesPage: React.FC = () => {
     load();
   }, [load, tripId]);
 
+  // רענון כשחוזרים לדף (iOS PWA)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', load);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', load);
+    };
+  }, [load]);
+
   const handleSaved = (_exp: Expense) => {
     setShowModal(false);
     setEditingExpense(null);
