@@ -144,6 +144,63 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
+// ─── PUT /api/expenses/:expenseId ────────────────────────────────────────────
+export const updateExpense = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { expenseId } = req.params as { expenseId: string };
+    const { paidByUserId, amount, currency, exchangeRate, description, category, participantIds } = req.body;
+
+    const expense = await prisma.tripExpense.findUnique({ where: { id: expenseId } });
+    if (!expense) { res.status(404).json({ error: 'הוצאה לא נמצאה' }); return; }
+
+    const member = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId: expense.tripId } },
+    });
+    if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+
+    const canEdit = expense.paidByUserId === req.userId || member.role === 'ADMIN';
+    if (!canEdit) { res.status(403).json({ error: 'רק מי ששילם או מנהל יכולים לערוך הוצאה' }); return; }
+
+    // ולידציות
+    if (!description?.trim())              { res.status(400).json({ error: 'תיאור הוצאה חסר' }); return; }
+    if (!amount || amount <= 0)             { res.status(400).json({ error: 'סכום לא תקין' }); return; }
+    if (!exchangeRate || exchangeRate <= 0) { res.status(400).json({ error: 'שער המרה לא תקין' }); return; }
+    if (!paidByUserId)                      { res.status(400).json({ error: 'חסר מי שילם' }); return; }
+    if (!participantIds?.length)            { res.status(400).json({ error: 'חסרים משתתפים' }); return; }
+
+    const amountILS = Math.round(amount * exchangeRate * 100) / 100;
+
+    // עדכון + החלפת משתתפים
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.expenseParticipant.deleteMany({ where: { expenseId } });
+      return tx.tripExpense.update({
+        where: { id: expenseId },
+        data: {
+          paidByUserId,
+          amount,
+          currency: currency || 'ILS',
+          exchangeRate,
+          amountILS,
+          description: description.trim(),
+          category: VALID_CATEGORIES.includes(category) ? category : 'other',
+          participants: {
+            create: (participantIds as string[]).map((uid: string) => ({ userId: uid })),
+          },
+        },
+        include: {
+          paidBy:       { select: { id: true, name: true } },
+          participants: { include: { user: { select: { id: true, name: true } } } },
+        },
+      });
+    });
+
+    res.json({ expense: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בעדכון הוצאה' });
+  }
+};
+
 // ─── DELETE /api/expenses/:expenseId ─────────────────────────────────────────
 export const deleteExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

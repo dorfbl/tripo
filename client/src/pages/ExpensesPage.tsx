@@ -67,33 +67,40 @@ const fmtAmt = (amount: number, currency: string) => {
 
 const catInfo = (id: string) => CATEGORIES.find(c => c.id === id) ?? { emoji: '📌', label: 'אחר' };
 
-// ─── קומפוננט AddExpenseModal ──────────────────────────────────────────────────
+// ─── קומפוננט ExpenseModal (הוספה + עריכה) ────────────────────────────────────
 interface ModalProps {
-  tripId:  string;
-  members: TripMemberFull[];
-  myUserId: string;
-  onClose: () => void;
-  onAdded: (exp: Expense) => void;
+  tripId:       string;
+  members:      TripMemberFull[];
+  myUserId:     string;
+  editExpense?: Expense;          // אם מסופק — מצב עריכה
+  onClose:      () => void;
+  onSaved:      (exp: Expense) => void;
 }
 
-const AddExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, onClose, onAdded }) => {
-  const [description,   setDescription]   = useState('');
-  const [category,      setCategory]      = useState('other');
-  const [paidByUserId,  setPaidBy]        = useState(myUserId);
-  const [amount,        setAmount]        = useState('');
-  const [currency,      setCurrency]      = useState('ILS');
-  const [exchangeRate,  setExchangeRate]  = useState(1);
-  const [participants,  setParticipants]  = useState<string[]>(members.map(m => m.userId));
-  const [saving,        setSaving]        = useState(false);
-  const [error,         setError]         = useState('');
+const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExpense, onClose, onSaved }) => {
+  const isEdit = !!editExpense;
 
-  const curInfo = CURRENCIES.find(c => c.code === currency)!;
+  const [description,  setDescription]  = useState(editExpense?.description ?? '');
+  const [category,     setCategory]     = useState(editExpense?.category ?? 'other');
+  const [paidByUserId, setPaidBy]       = useState(editExpense?.paidBy.id ?? myUserId);
+  const [amount,       setAmount]       = useState(editExpense ? String(editExpense.amount) : '');
+  const [currency,     setCurrency]     = useState(editExpense?.currency ?? 'ILS');
+  const [exchangeRate, setExchangeRate] = useState(editExpense?.exchangeRate ?? 1);
+  const [participants, setParticipants] = useState<string[]>(
+    editExpense ? editExpense.participants.map(p => p.userId) : members.map(m => m.userId)
+  );
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState('');
+
+  const curInfo   = CURRENCIES.find(c => c.code === currency)!;
   const amountILS = amount ? Math.round(parseFloat(amount) * exchangeRate * 100) / 100 : 0;
 
   const handleCurrencyChange = (code: string) => {
     setCurrency(code);
-    const def = CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1;
-    setExchangeRate(def);
+    // בעריכה — שמור את השער הקיים אם המטבע לא השתנה, אחרת ברירת מחדל
+    if (!editExpense || code !== editExpense.currency) {
+      setExchangeRate(CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1);
+    }
   };
 
   const toggleParticipant = (uid: string) => {
@@ -105,22 +112,25 @@ const AddExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, onCl
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!description.trim())  { setError('חובה להזין תיאור'); return; }
+    if (!description.trim())     { setError('חובה להזין תיאור'); return; }
     if (!amount || +amount <= 0) { setError('חובה להזין סכום חיובי'); return; }
-    if (!participants.length) { setError('חובה לבחור לפחות משתתף אחד'); return; }
+    if (!participants.length)    { setError('חובה לבחור לפחות משתתף אחד'); return; }
 
     setSaving(true);
     try {
-      const res = await apiClient.post(`/api/expenses/${tripId}`, {
+      const payload = {
         description, category, paidByUserId,
         amount: parseFloat(amount),
         currency, exchangeRate,
         participantIds: participants,
-      });
-      onAdded(res.data.expense);
+      };
+      const res = isEdit
+        ? await apiClient.put(`/api/expenses/${editExpense!.id}`, payload)
+        : await apiClient.post(`/api/expenses/${tripId}`, payload);
+      onSaved(res.data.expense);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
-      setError(e.response?.data?.error ?? 'שגיאה בהוספה');
+      setError(e.response?.data?.error ?? (isEdit ? 'שגיאה בעדכון' : 'שגיאה בהוספה'));
     } finally {
       setSaving(false);
     }
@@ -130,7 +140,7 @@ const AddExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, onCl
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
-          <h2 className="font-bold text-neutral-900 text-lg">➕ הוצאה חדשה</h2>
+          <h2 className="font-bold text-neutral-900 text-lg">{isEdit ? '✏️ עריכת הוצאה' : '➕ הוצאה חדשה'}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
         </div>
 
@@ -276,7 +286,7 @@ const AddExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, onCl
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
           <Button type="submit" size="lg" className="w-full" loading={saving}>
-            הוסף הוצאה
+            {isEdit ? 'שמור שינויים' : 'הוסף הוצאה'}
           </Button>
         </form>
       </div>
@@ -294,9 +304,10 @@ export const ExpensesPage: React.FC = () => {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [members,     setMembers]     = useState<TripMemberFull[]>([]);
   const [totalILS,    setTotalILS]    = useState(0);
-  const [loading,     setLoading]     = useState(true);
-  const [showModal,   setShowModal]   = useState(false);
-  const [activeTab,   setActiveTab]   = useState<'expenses' | 'settlements'>('expenses');
+  const [loading,       setLoading]       = useState(true);
+  const [showModal,     setShowModal]     = useState(false);
+  const [editingExpense,setEditingExpense] = useState<Expense | null>(null);
+  const [activeTab,     setActiveTab]     = useState<'expenses' | 'settlements'>('expenses');
   const [deleting,    setDeleting]    = useState<string | null>(null);
   const [tripName,    setTripName]    = useState('');
 
@@ -322,9 +333,9 @@ export const ExpensesPage: React.FC = () => {
     }
   }, [load, tripId]);
 
-  const handleAdded = (exp: Expense) => {
-    setExpenses(prev => [exp, ...prev]);
+  const handleSaved = (_exp: Expense) => {
     setShowModal(false);
+    setEditingExpense(null);
     load(); // טעינה מחדש לעדכון settlements ו-totalILS
   };
 
@@ -360,7 +371,7 @@ export const ExpensesPage: React.FC = () => {
             {expenses.length} הוצאות • סה״כ {fmtILS(totalILS)}
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowModal(true)}>+ הוצאה</Button>
+        <Button size="sm" onClick={() => { setEditingExpense(null); setShowModal(true); }}>+ הוצאה</Button>
       </div>
 
       {/* Tabs */}
@@ -440,19 +451,27 @@ export const ExpensesPage: React.FC = () => {
                         ))}
                       </div>
 
-                      {/* תאריך + מחיקה */}
+                      {/* תאריך + עריכה + מחיקה */}
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-neutral-400">
                           {new Date(exp.createdAt).toLocaleDateString('he-IL')}
                         </span>
                         {canDelete && (
-                          <button
-                            onClick={() => handleDelete(exp.id)}
-                            disabled={deleting === exp.id}
-                            className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                          >
-                            {deleting === exp.id ? '...' : 'מחק'}
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => { setEditingExpense(exp); setShowModal(true); }}
+                              className="text-xs text-brand-500 hover:text-brand-700 transition-colors"
+                            >
+                              ✏️ ערוך
+                            </button>
+                            <button
+                              onClick={() => handleDelete(exp.id)}
+                              disabled={deleting === exp.id}
+                              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              {deleting === exp.id ? '...' : 'מחק'}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -541,12 +560,13 @@ export const ExpensesPage: React.FC = () => {
       )}
 
       {showModal && (
-        <AddExpenseModal
+        <ExpenseModal
           tripId={tripId!}
           members={members}
           myUserId={user!.id}
-          onClose={() => setShowModal(false)}
-          onAdded={handleAdded}
+          editExpense={editingExpense ?? undefined}
+          onClose={() => { setShowModal(false); setEditingExpense(null); }}
+          onSaved={handleSaved}
         />
       )}
     </AppShell>
