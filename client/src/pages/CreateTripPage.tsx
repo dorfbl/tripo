@@ -42,7 +42,7 @@ export const CreateTripPage: React.FC = () => {
   };
 
   return (
-    <AppShell maxWidth="sm">
+    <AppShell showBottomNav maxWidth="sm">
       <button
         onClick={() => navigate('/')}
         className="text-sm text-neutral-500 hover:text-neutral-700 flex items-center gap-1 mb-4"

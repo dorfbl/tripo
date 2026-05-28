@@ -17,7 +17,7 @@ export const DestinationsPage: React.FC = () => {
   const reload = () => { if (tripId) loadDestinations(tripId); };
 
   return (
-    <AppShell maxWidth="lg">
+    <AppShell showBottomNav maxWidth="lg">
       <button
         onClick={() => navigate(`/trip/${tripId}`)}
         className="text-sm text-neutral-500 hover:text-neutral-700 flex items-center gap-1 mb-4"

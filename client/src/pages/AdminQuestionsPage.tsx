@@ -176,7 +176,7 @@ export const AdminQuestionsPage: React.FC = () => {
   if (!isAdmin) return null;
 
   return (
-    <AppShell maxWidth="2xl">
+    <AppShell showBottomNav maxWidth="2xl">
       {/* כותרת */}
       <div className="flex items-center justify-between mb-6">
         <div>
