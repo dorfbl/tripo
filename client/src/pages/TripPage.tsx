@@ -5,9 +5,16 @@ import { useAuthStore } from '../store/authStore';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import apiClient from '../api/client';
+
+const STATUS_LABEL: Record<string, string> = {
+  PLANNING: 'תכנון',
+  VOTING: 'הצבעות',
+  BOOKED: 'נקבע',
+  ONGOING: 'בדרך!',
+  COMPLETED: 'הושלם',
+};
 
 export const TripPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,10 +30,7 @@ export const TripPage: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    if (id) {
-      loadTrip(id);
-      loadStatus(id);
-    }
+    if (id) { loadTrip(id); loadStatus(id); }
   }, [id]);
 
   const loadStatus = async (tripId: string) => {
@@ -38,8 +42,7 @@ export const TripPage: React.FC = () => {
 
   const copyInvite = () => {
     if (!currentTrip) return;
-    const url = `${window.location.origin}/join/${currentTrip.inviteCode}`;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(`${window.location.origin}/join/${currentTrip.inviteCode}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -52,8 +55,8 @@ export const TripPage: React.FC = () => {
       await generateDestinations(id);
       navigate(`/trip/${id}/destinations`);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { error?: string } } };
-      setGenError(error.response?.data?.error || 'שגיאה בייצור המלצות');
+      const e = err as { response?: { data?: { error?: string } } };
+      setGenError(e.response?.data?.error || 'שגיאה בייצור המלצות');
     } finally {
       setGenerating(false);
     }
@@ -61,76 +64,81 @@ export const TripPage: React.FC = () => {
 
   if (isLoading || !currentTrip) {
     return (
-      <AppShell><div className="text-center py-12 text-neutral-400">טוען...</div></AppShell>
+      <AppShell tripId={id}>
+        <div className="text-center py-12 text-neutral-400">טוען...</div>
+      </AppShell>
     );
   }
 
-  const myMember = currentTrip.members.find((m) => m.userId === user?.id);
-  const isAdmin = myMember?.role === 'ADMIN';
+  const myMember   = currentTrip.members.find((m) => m.userId === user?.id);
+  const isAdmin    = myMember?.role === 'ADMIN';
   const myCompleted = myMember?.completedQuestionnaire ?? false;
 
   return (
     <AppShell tripId={id}>
 
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-900">{currentTrip.name}</h1>
-            {currentTrip.startDate && (
-              <p className="text-sm text-neutral-400 mt-1">
-                {new Date(currentTrip.startDate).toLocaleDateString('he-IL')}
-                {currentTrip.endDate && ` — ${new Date(currentTrip.endDate).toLocaleDateString('he-IL')}`}
-              </p>
+      {/* ─── כותרת הטיול ─── */}
+      <div className="mb-5">
+        <h1 className="text-2xl font-bold text-neutral-900 leading-tight">{currentTrip.name}</h1>
+
+        {/* תאריכים */}
+        {currentTrip.startDate ? (
+          <p className="text-sm text-neutral-500 mt-1">
+            📅 {new Date(currentTrip.startDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {currentTrip.endDate && (
+              <> — {new Date(currentTrip.endDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })}</>
             )}
-          </div>
-          <Badge color={currentTrip.status === 'PLANNING' ? 'blue' : currentTrip.status === 'VOTING' ? 'yellow' : 'green'}>
-            {currentTrip.status === 'PLANNING' ? 'תכנון' : currentTrip.status === 'VOTING' ? 'הצבעות' : currentTrip.status}
-          </Badge>
+          </p>
+        ) : (
+          <p className="text-sm text-neutral-400 mt-1">📅 תאריכים טרם נקבעו</p>
+        )}
+
+        {/* סטטוס */}
+        <div className="mt-2">
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+            currentTrip.status === 'PLANNING'  ? 'bg-blue-100 text-blue-600' :
+            currentTrip.status === 'VOTING'    ? 'bg-yellow-100 text-yellow-700' :
+            currentTrip.status === 'ONGOING'   ? 'bg-green-100 text-green-700' :
+            'bg-neutral-100 text-neutral-500'
+          }`}>
+            {STATUS_LABEL[currentTrip.status] ?? currentTrip.status}
+          </span>
         </div>
       </div>
 
-      {/* הזמנת חברים */}
+      {/* ─── חברי הקבוצה ─── */}
       <Card className="p-4 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-neutral-800">שתף לינק הצטרפות</h2>
-          <Button variant="secondary" size="sm" onClick={copyInvite}>
-            {copied ? '✓ הועתק!' : 'העתק לינק'}
-          </Button>
-        </div>
-        <p className="text-xs text-neutral-400 font-mono truncate">
-          {window.location.origin}/join/{currentTrip.inviteCode}
-        </p>
-      </Card>
-
-      {/* חברי הטיול + סטטוס שאלון */}
-      <Card className="p-4 mb-4">
-        <h2 className="font-semibold text-neutral-800 mb-3">
-          חברי הקבוצה
-          {questStatus && (
-            <span className="text-sm font-normal text-neutral-400 mr-2">
-              ({questStatus.completed}/{questStatus.total} מילאו שאלון)
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-neutral-800">
+            חברי הקבוצה
+            <span className="text-sm font-normal text-neutral-400 mr-1.5">
+              ({currentTrip.members.length})
             </span>
-          )}
-        </h2>
-        <div className="flex flex-col gap-2">
+          </h2>
+          <button
+            onClick={copyInvite}
+            className="text-xs text-brand-500 font-medium hover:text-brand-700 transition-colors"
+          >
+            {copied ? '✓ הועתק' : '+ הזמן חבר'}
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
           {currentTrip.members.map((member) => {
             const statusMember = questStatus?.members.find((m) => m.userId === member.userId);
             return (
               <div key={member.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <Avatar name={member.user.name} size="sm" />
-                  <div>
-                    <span className="text-sm font-medium text-neutral-800">{member.user.name}</span>
-                    {member.role === 'ADMIN' && (
-                      <span className="text-xs text-neutral-400 mr-1">👑</span>
-                    )}
-                  </div>
+                  <span className="text-sm font-medium text-neutral-800">
+                    {member.user.name}
+                    {member.role === 'ADMIN' && <span className="mr-1 text-xs">👑</span>}
+                  </span>
                 </div>
-                {statusMember?.completed ? (
-                  <span className="text-xs text-green-600 font-medium">✅ מילא</span>
-                ) : (
-                  <span className="text-xs text-neutral-400">ממתין...</span>
+                {currentTrip.status === 'PLANNING' && (
+                  statusMember?.completed
+                    ? <span className="text-xs text-green-600 font-medium">✅ מילא שאלון</span>
+                    : <span className="text-xs text-neutral-400">ממתין...</span>
                 )}
               </div>
             );
@@ -138,34 +146,16 @@ export const TripPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* הוצאות — גלוי לכולם, תמיד */}
-      <Card className="p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-neutral-800">💸 הוצאות קבוצתיות</h2>
-            <p className="text-xs text-neutral-400 mt-0.5">מעקב הוצאות וחישוב מי חייב למי</p>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => navigate(`/trip/${id}/expenses`)}>
-            פתח
-          </Button>
-        </div>
-      </Card>
+      {/* ─── פעולות לפי שלב ─── */}
 
-      {/* פעולות */}
       {currentTrip.status === 'PLANNING' && (
         <div className="flex flex-col gap-3">
-          {/* כפתור שאלון — לכולם שלא מילאו */}
           {!myCompleted && (
-            <Button
-              size="lg"
-              className="w-full"
-              onClick={() => navigate(`/trip/${id}/questionnaire`)}
-            >
+            <Button size="lg" className="w-full" onClick={() => navigate(`/trip/${id}/questionnaire`)}>
               📋 מלא את השאלון
             </Button>
           )}
 
-          {/* מילאתי — הודעה לפי תפקיד */}
           {myCompleted && !isAdmin && (
             <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700 text-center">
               ✅ מילאת את השאלון!
@@ -175,15 +165,9 @@ export const TripPage: React.FC = () => {
             </div>
           )}
 
-          {/* כפתור AI — אדמין בלבד */}
           {isAdmin && questStatus && questStatus.completed > 0 && (
             <div>
-              <Button
-                size="lg"
-                className="w-full"
-                loading={generating}
-                onClick={handleGenerate}
-              >
+              <Button size="lg" className="w-full" loading={generating} onClick={handleGenerate}>
                 🤖 ייצר המלצות AI
                 {questStatus.completed < questStatus.total && (
                   <span className="text-xs mr-2 opacity-70">
@@ -195,8 +179,7 @@ export const TripPage: React.FC = () => {
             </div>
           )}
 
-          {/* אדמין מילא אבל אין תשובות כלל (רק הוא) */}
-          {isAdmin && myCompleted && questStatus && questStatus.completed === 0 && (
+          {isAdmin && questStatus && questStatus.completed === 0 && (
             <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-sm text-neutral-500 text-center">
               ממתין שחברים ימלאו את השאלון לפני ייצור המלצות
             </div>
@@ -206,23 +189,12 @@ export const TripPage: React.FC = () => {
 
       {currentTrip.status === 'VOTING' && (
         <div className="flex flex-col gap-3">
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={() => navigate(`/trip/${id}/destinations`)}
-          >
+          <Button size="lg" className="w-full" onClick={() => navigate(`/trip/${id}/destinations`)}>
             🗳️ לצפות ביעדים ולהצביע
           </Button>
-          {/* אדמין יכול לייצר מחדש */}
           {isAdmin && (
             <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full text-neutral-400"
-                loading={generating}
-                onClick={handleGenerate}
-              >
+              <Button variant="ghost" size="sm" className="w-full text-neutral-400" loading={generating} onClick={handleGenerate}>
                 🔄 ייצר המלצות מחדש
               </Button>
               {genError && <p className="text-xs text-red-500 mt-1 text-center">{genError}</p>}
@@ -230,6 +202,7 @@ export const TripPage: React.FC = () => {
           )}
         </div>
       )}
+
     </AppShell>
   );
 };
