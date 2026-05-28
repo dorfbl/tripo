@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
@@ -6,14 +6,37 @@ import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/authStore';
 
 export const EditProfilePage: React.FC = () => {
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfile, uploadAvatar } = useAuthStore();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [name,    setName]    = useState(user?.name ?? '');
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState('');
-  const [success, setSuccess] = useState(false);
+  const [name,       setName]       = useState(user?.name ?? '');
+  const [preview,    setPreview]    = useState<string | null>(null); // local blob preview
+  const [uploading,  setUploading]  = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState('');
+  const [success,    setSuccess]    = useState(false);
 
+  // ─── בחירת תמונה ───────────────────────────────────────────────────────────
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // preview מקומי מיידי
+    setPreview(URL.createObjectURL(file));
+    setError('');
+    setUploading(true);
+    try {
+      await uploadAvatar(file);
+    } catch {
+      setError('שגיאה בהעלאת התמונה');
+      setPreview(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ─── שמירת שם ──────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) { setError('שם הוא שדה חובה'); return; }
@@ -22,7 +45,7 @@ export const EditProfilePage: React.FC = () => {
     try {
       await updateProfile(name.trim());
       setSuccess(true);
-      setTimeout(() => navigate('/profile'), 1000);
+      setTimeout(() => navigate('/profile'), 900);
     } catch {
       setError('שגיאה בשמירת הפרופיל');
     } finally {
@@ -30,7 +53,9 @@ export const EditProfilePage: React.FC = () => {
     }
   };
 
-  const initials = name
+  // ─── Avatar display ─────────────────────────────────────────────────────────
+  const avatarSrc = preview ?? user?.avatarUrl ?? null;
+  const initials  = name
     ? name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     : '?';
 
@@ -48,12 +73,48 @@ export const EditProfilePage: React.FC = () => {
         <h1 className="text-xl font-bold text-neutral-900">עריכת פרופיל</h1>
       </div>
 
-      {/* תצוגה מקדימה של Avatar */}
+      {/* Avatar עם כפתור עריכה */}
       <div className="flex justify-center mb-6">
-        <div className="w-20 h-20 rounded-full bg-brand-100 flex items-center justify-center text-2xl font-bold text-brand-600">
-          {initials}
+        <div className="relative">
+          {/* תמונה / אותיות */}
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt={name}
+              className="w-24 h-24 rounded-full object-cover shadow-sm"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-brand-100 flex items-center justify-center text-3xl font-bold text-brand-600">
+              {initials}
+            </div>
+          )}
+
+          {/* כפתור עריכה */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="absolute bottom-0 left-0 w-8 h-8 rounded-full bg-white border-2 border-neutral-200 shadow flex items-center justify-center hover:bg-neutral-50 transition-colors"
+          >
+            {uploading
+              ? <span className="text-xs text-neutral-400 animate-spin">⟳</span>
+              : <span className="text-sm">📷</span>
+            }
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleFileChange}
+          />
         </div>
       </div>
+
+      {uploading && (
+        <p className="text-xs text-neutral-400 text-center mb-4">מעלה תמונה...</p>
+      )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Card className="p-5 flex flex-col gap-4">
@@ -108,7 +169,7 @@ export const EditProfilePage: React.FC = () => {
           size="lg"
           className="w-full"
           loading={saving}
-          disabled={!name.trim() || name.trim() === user?.name}
+          disabled={!name.trim() || (name.trim() === user?.name && !preview)}
         >
           שמור שינויים
         </Button>

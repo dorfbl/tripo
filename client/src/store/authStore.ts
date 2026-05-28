@@ -11,6 +11,7 @@ interface AuthState {
   logout: () => void;
   loadUser: () => Promise<void>;
   updateProfile: (name: string) => Promise<void>;
+  uploadAvatar:  (file: File) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -51,6 +52,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   updateProfile: async (name) => {
     const res = await apiClient.put('/api/auth/profile', { name });
+    set({ user: res.data.user });
+  },
+
+  uploadAvatar: async (file) => {
+    const form = new FormData();
+    form.append('avatar', file);
+    const res = await apiClient.post('/api/auth/profile/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     set({ user: res.data.user });
   },
 

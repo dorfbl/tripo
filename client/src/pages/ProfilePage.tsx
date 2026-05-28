@@ -27,9 +27,17 @@ export const ProfilePage: React.FC = () => {
         {/* כרטיס משתמש */}
         <Card className="p-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-xl font-bold text-brand-600 flex-shrink-0">
-              {initials}
-            </div>
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
+                className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-xl font-bold text-brand-600 flex-shrink-0">
+                {initials}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-bold text-neutral-900 leading-tight">{user?.name}</h2>
               <p className="text-sm text-neutral-400 mt-0.5">{user?.email}</p>

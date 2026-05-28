@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import path from 'path';
+import fs from 'fs';
 import { prisma } from '../lib/prisma';
 import { config } from '../config/env';
 import { AuthRequest } from '../middleware/auth';
@@ -79,6 +81,37 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'לא נשלחה תמונה' });
+      return;
+    }
+
+    // מחק תמונה ישנה אם קיימת
+    const existing = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { avatarUrl: true },
+    });
+    if (existing?.avatarUrl) {
+      const oldPath = path.join('/home/dor/tripo/uploads', existing.avatarUrl.replace('/uploads/', ''));
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      data: { avatarUrl },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
+
+    res.json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בהעלאת התמונה' });
+  }
+};
+
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name } = req.body;
@@ -90,7 +123,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     const user = await prisma.user.update({
       where: { id: req.userId },
       data: { name: name.trim() },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, avatarUrl: true },
     });
 
     res.json({ user });
@@ -104,7 +137,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true, createdAt: true },
+      select: { id: true, name: true, email: true, avatarUrl: true, createdAt: true },
     });
 
     if (!user) {
