@@ -58,9 +58,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   uploadAvatar: async (file) => {
     const form = new FormData();
     form.append('avatar', file);
-    const res = await apiClient.post('/api/auth/profile/avatar', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    // אל תגדיר Content-Type ידנית — axios מוסיף אוטומטית עם boundary
+    const res = await apiClient.post('/api/auth/profile/avatar', form);
     set({ user: res.data.user });
   },
 
