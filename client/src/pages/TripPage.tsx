@@ -197,6 +197,19 @@ export const TripPage: React.FC = () => {
         </div>
       )}
 
+      {/* כפתור הוצאות — לכולם בכל שלב */}
+      <Card className="p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-neutral-800">💸 הוצאות קבוצתיות</h2>
+            <p className="text-xs text-neutral-400 mt-0.5">מעקב הוצאות וחישוב מי חייב למי</p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => navigate(`/trip/${id}/expenses`)}>
+            פתח
+          </Button>
+        </div>
+      </Card>
+
       {currentTrip.status === 'VOTING' && (
         <div className="flex flex-col gap-3">
           <Button

@@ -6,6 +6,7 @@ import tripsRoutes from './routes/trips.routes';
 import questionnaireRoutes from './routes/questionnaire.routes';
 import destinationsRoutes from './routes/destinations.routes';
 import adminRoutes from './routes/admin.routes';
+import expensesRoutes from './routes/expenses.routes';
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use('/api/trips', tripsRoutes);
 app.use('/api/questionnaire', questionnaireRoutes);
 app.use('/api/destinations', destinationsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/expenses', expensesRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

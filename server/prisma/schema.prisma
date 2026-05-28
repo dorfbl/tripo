@@ -14,9 +14,11 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  trips        TripMember[]
-  answers      QuestionAnswer[]
-  votes        DestinationVote[]
+  trips              TripMember[]
+  answers            QuestionAnswer[]
+  votes              DestinationVote[]
+  expensesPaid       TripExpense[]          @relation("ExpensesPaid")
+  expenseParticipations ExpenseParticipant[]
 }
 
 model Trip {
@@ -30,6 +32,7 @@ model Trip {
 
   members      TripMember[]
   destinations SuggestedDestination[]
+  expenses     TripExpense[]
 }
 
 enum TripStatus {
@@ -106,6 +109,36 @@ model SuggestedDestination {
 
   trip        Trip     @relation(fields: [tripId], references: [id])
   votes       DestinationVote[]
+}
+
+// ===== הוצאות (Splitwise) =====
+
+model TripExpense {
+  id           String   @id @default(uuid())
+  tripId       String
+  paidByUserId String
+  amount       Float
+  currency     String   @default("ILS")
+  exchangeRate Float    @default(1)   // כמה שקלים שווה יחידת מטבע
+  amountILS    Float                  // amount * exchangeRate
+  description  String
+  category     String   @default("other")
+  createdAt    DateTime @default(now())
+
+  trip         Trip                 @relation(fields: [tripId], references: [id])
+  paidBy       User                 @relation("ExpensesPaid", fields: [paidByUserId], references: [id])
+  participants ExpenseParticipant[]
+}
+
+model ExpenseParticipant {
+  id        String      @id @default(uuid())
+  expenseId String
+  userId    String
+
+  expense   TripExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
 }
 
 model DestinationVote {
