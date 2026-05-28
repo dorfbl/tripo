@@ -342,11 +342,11 @@ export const ExpensesPage: React.FC = () => {
   };
 
   if (loading) {
-    return <AppShell tripId={tripId}><div className="text-center py-12 text-neutral-400">טוען...</div></AppShell>;
+    return <AppShell showBottomNav><div className="text-center py-12 text-neutral-400">טוען...</div></AppShell>;
   }
 
   return (
-    <AppShell tripId={tripId}>
+    <AppShell showBottomNav>
 
       {/* Header */}
       <div className="flex items-start justify-between mb-5">

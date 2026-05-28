@@ -1,17 +1,18 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { useAuthStore } from '../store/authStore';
+import { useActiveTripStore } from '../store/activeTripStore';
 
 export const ProfilePage: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const location  = useLocation();
-  const navigate  = useNavigate();
-  const tripId    = (location.state as { tripId?: string })?.tripId;
+  const { activeTripName, clearActiveTrip } = useActiveTripStore();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+    clearActiveTrip();
     navigate('/login', { replace: true });
   };
 
@@ -20,7 +21,7 @@ export const ProfilePage: React.FC = () => {
     : '?';
 
   return (
-    <AppShell tripId={tripId ?? ''}>
+    <AppShell showBottomNav>
       <div className="flex flex-col gap-4">
 
         {/* כרטיס משתמש */}
@@ -29,16 +30,29 @@ export const ProfilePage: React.FC = () => {
             <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-xl font-bold text-brand-600 flex-shrink-0">
               {initials}
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h2 className="text-lg font-bold text-neutral-900 leading-tight">{user?.name}</h2>
               <p className="text-sm text-neutral-400 mt-0.5">{user?.email}</p>
+              {activeTripName && (
+                <p className="text-xs text-brand-500 font-medium mt-1">✈️ {activeTripName}</p>
+              )}
             </div>
           </div>
         </Card>
 
         {/* פעולות */}
         <Card className="overflow-hidden divide-y divide-neutral-100">
-          {/* חזור לרשימת הטיולים */}
+
+          {/* עריכת פרופיל — בקרוב */}
+          <button
+            disabled
+            className="w-full flex items-center justify-between px-5 py-4 opacity-40 cursor-not-allowed"
+          >
+            <span className="text-sm font-medium text-neutral-800">✏️ עריכת פרופיל</span>
+            <span className="text-xs text-neutral-400">בקרוב</span>
+          </button>
+
+          {/* כל הטיולים שלי */}
           <button
             onClick={() => navigate('/', { state: { showDashboard: true } })}
             className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors"

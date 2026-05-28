@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
 import { useAuthStore } from '../store/authStore';
+import { useActiveTripStore } from '../store/activeTripStore';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -20,6 +21,7 @@ export const TripPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { currentTrip, loadTrip, isLoading, generateDestinations } = useTripStore();
   const { user } = useAuthStore();
+  const { setActiveTrip } = useActiveTripStore();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -32,6 +34,13 @@ export const TripPage: React.FC = () => {
   useEffect(() => {
     if (id) { loadTrip(id); loadStatus(id); }
   }, [id]);
+
+  // עדכן את הטיול הפעיל כשהטיול נטען
+  useEffect(() => {
+    if (id && currentTrip) {
+      setActiveTrip(id, currentTrip.name);
+    }
+  }, [id, currentTrip?.name]);
 
   const loadStatus = async (tripId: string) => {
     try {
@@ -64,7 +73,7 @@ export const TripPage: React.FC = () => {
 
   if (isLoading || !currentTrip) {
     return (
-      <AppShell tripId={id}>
+      <AppShell showBottomNav>
         <div className="text-center py-12 text-neutral-400">טוען...</div>
       </AppShell>
     );
@@ -75,7 +84,7 @@ export const TripPage: React.FC = () => {
   const myCompleted = myMember?.completedQuestionnaire ?? false;
 
   return (
-    <AppShell tripId={id}>
+    <AppShell showBottomNav>
 
       {/* ─── כותרת הטיול ─── */}
       <div className="mb-5">

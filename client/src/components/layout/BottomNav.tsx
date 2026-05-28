@@ -1,55 +1,48 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useActiveTripStore } from '../../store/activeTripStore';
 
-interface BottomNavProps {
-  tripId?: string;
-}
-
-const tabs = (tripId: string | undefined) => [
-  {
-    id: 'info',
-    label: 'מידע',
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-        <circle cx="12" cy="9" r="2.5" strokeLinecap="round"/>
-      </svg>
-    ),
-    path: tripId ? `/trip/${tripId}` : '/',
-    match: (p: string) => !!tripId && p === `/trip/${tripId}`,
-  },
-  {
-    id: 'expenses',
-    label: 'הוצאות',
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8}>
-        <rect x="2" y="5" width="20" height="14" rx="2" strokeLinecap="round"/>
-        <path strokeLinecap="round" d="M2 10h20"/>
-        <path strokeLinecap="round" d="M6 15h4M14 15h4"/>
-      </svg>
-    ),
-    path: tripId ? `/trip/${tripId}/expenses` : '/',
-    match: (p: string) => !!tripId && p === `/trip/${tripId}/expenses`,
-  },
-  {
-    id: 'profile',
-    label: 'פרופיל',
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8}>
-        <circle cx="12" cy="8" r="4" strokeLinecap="round"/>
-        <path strokeLinecap="round" d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/>
-      </svg>
-    ),
-    path: '/profile',
-    match: (p: string) => p === '/profile',
-  },
-];
-
-export const BottomNav: React.FC<BottomNavProps> = ({ tripId }) => {
+export const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const navTabs = tabs(tripId);
+  const { activeTripId } = useActiveTripStore();
+
+  const goToInfo     = () => activeTripId ? navigate(`/trip/${activeTripId}`)           : navigate('/');
+  const goToExpenses = () => activeTripId ? navigate(`/trip/${activeTripId}/expenses`)  : navigate('/');
+  const goToProfile  = () => navigate('/profile');
+
+  const isInfo     = /^\/trip\/[^/]+$/.test(pathname);
+  const isExpenses = /^\/trip\/[^/]+\/expenses$/.test(pathname);
+  const isProfile  = pathname === '/profile';
+
+  const tabs = [
+    {
+      id: 'info', label: 'מידע', active: isInfo, onClick: goToInfo,
+      icon: (a: boolean) => (
+        <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={a ? 2.2 : 1.7}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'expenses', label: 'הוצאות', active: isExpenses, onClick: goToExpenses,
+      icon: (a: boolean) => (
+        <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={a ? 2.2 : 1.7}>
+          <rect x="2" y="5" width="20" height="14" rx="2" strokeLinecap="round"/>
+          <path strokeLinecap="round" d="M2 10h20M6 15h3M15 15h3"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'profile', label: 'פרופיל', active: isProfile, onClick: goToProfile,
+      icon: (a: boolean) => (
+        <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth={a ? 2.2 : 1.7}>
+          <circle cx="12" cy="8" r="4" strokeLinecap="round"/>
+          <path strokeLinecap="round" d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/>
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <nav
@@ -57,23 +50,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({ tripId }) => {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex max-w-2xl mx-auto">
-        {navTabs.map(tab => {
-          const active = tab.match(pathname);
-          return (
-            <button
-              key={tab.id}
-              onClick={() => navigate(tab.path, { state: { tripId } })}
-              className={`flex-1 flex flex-col items-center pt-3 pb-2 gap-1 transition-colors ${
-                active ? 'text-brand-500' : 'text-neutral-400'
-              }`}
-            >
-              {tab.icon(active)}
-              <span className={`text-xs leading-none ${active ? 'font-semibold' : 'font-medium'}`}>
-                {tab.label}
-              </span>
-            </button>
-          );
-        })}
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={tab.onClick}
+            className={`flex-1 flex flex-col items-center pt-3 pb-2 gap-1 transition-colors ${
+              tab.active ? 'text-brand-500' : 'text-neutral-400'
+            }`}
+          >
+            {tab.icon(tab.active)}
+            <span className={`text-xs leading-none ${tab.active ? 'font-semibold' : 'font-medium'}`}>
+              {tab.label}
+            </span>
+          </button>
+        ))}
       </div>
     </nav>
   );
