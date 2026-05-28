@@ -14,7 +14,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, maxWidth = 'md', s
   return (
     <div className="min-h-screen bg-neutral-50">
       {!showBottomNav && <Navbar />}
-      <main className={`${widths[maxWidth]} mx-auto px-4 ${showBottomNav ? 'pt-5 pb-28' : 'py-6'}`}>
+      <main className={`${widths[maxWidth]} mx-auto px-4 ${showBottomNav ? 'pt-5 pb-20' : 'py-6'}`}>
         {children}
       </main>
       {showBottomNav && <BottomNav />}
