@@ -46,6 +46,7 @@ interface Expense {
   amountILS: number;
   paidBy: Member;
   participants: Participant[];
+  expenseDate: string;
   createdAt: string;
 }
 interface Settlement {
@@ -77,20 +78,10 @@ interface ModalProps {
   onSaved:      (exp: Expense) => void;
 }
 
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExpense, onClose, onSaved }) => {
   const isEdit = !!editExpense;
-
-  // נעל גלילת הרקע כשהמודל פתוח
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-    };
-  }, []);
 
   const [description,  setDescription]  = useState(editExpense?.description ?? '');
   const [category,     setCategory]     = useState(editExpense?.category ?? 'other');
@@ -98,6 +89,9 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
   const [amount,       setAmount]       = useState(editExpense ? String(editExpense.amount) : '');
   const [currency,     setCurrency]     = useState(editExpense?.currency ?? 'ILS');
   const [exchangeRate, setExchangeRate] = useState(editExpense?.exchangeRate ?? 1);
+  const [expenseDate,  setExpenseDate]  = useState(
+    editExpense?.expenseDate ? editExpense.expenseDate.slice(0, 10) : todayStr()
+  );
   const [participants, setParticipants] = useState<string[]>(
     editExpense ? editExpense.participants.map(p => p.userId) : members.map(m => m.userId)
   );
@@ -109,7 +103,6 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
 
   const handleCurrencyChange = (code: string) => {
     setCurrency(code);
-    // בעריכה — שמור את השער הקיים אם המטבע לא השתנה, אחרת ברירת מחדל
     if (!editExpense || code !== editExpense.currency) {
       setExchangeRate(CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1);
     }
@@ -134,6 +127,7 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
         description, category, paidByUserId,
         amount: parseFloat(amount),
         currency, exchangeRate,
+        expenseDate,
         participantIds: participants,
       };
       const res = isEdit
@@ -148,159 +142,187 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
     }
   };
 
+  // ─── מבנה נכון: overlay קבוע + sheet flex-col + header דביק + גוף גלילה ───
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain">
-        <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+      onTouchMove={e => e.preventDefault()}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white w-full rounded-t-2xl shadow-2xl flex flex-col"
+        style={{ maxHeight: '90dvh' }}
+        onTouchMove={e => e.stopPropagation()}
+      >
+        {/* Header דביק */}
+        <div className="flex-shrink-0 border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
           <h2 className="font-bold text-neutral-900 text-lg">{isEdit ? '✏️ עריכת הוצאה' : '➕ הוצאה חדשה'}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
-          {/* תיאור */}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 block mb-1">תיאור</label>
-            <input
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="למשל: ארוחת ערב ברסטורנט, מונית לשדה..."
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-            />
-          </div>
+        {/* גוף גלילה */}
+        <div className="overflow-y-auto overscroll-contain flex-1">
+          <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
 
-          {/* קטגוריה */}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 block mb-1.5">קטגוריה</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCategory(cat.id)}
-                  className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-xs transition-all ${
-                    category === cat.id
-                      ? 'border-brand-500 bg-brand-50 text-brand-600 font-medium'
-                      : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'
-                  }`}
-                >
-                  <span className="text-lg">{cat.emoji}</span>
-                  <span>{cat.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* מי שילם */}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 block mb-1">מי שילם?</label>
-            <select
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-              value={paidByUserId}
-              onChange={e => setPaidBy(e.target.value)}
-            >
-              {members.map(m => (
-                <option key={m.userId} value={m.userId}>
-                  {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* סכום + מטבע */}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 block mb-1">סכום</label>
-            <div className="flex gap-2">
+            {/* תיאור */}
+            <div>
+              <label className="text-sm font-medium text-neutral-700 block mb-1">תיאור</label>
               <input
-                type="number"
-                min="0"
-                step="any"
-                className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                placeholder="0.00"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="למשל: ארוחת ערב ברסטורנט, מונית לשדה..."
+                value={description}
+                onChange={e => setDescription(e.target.value)}
               />
+            </div>
+
+            {/* תאריך */}
+            <div>
+              <label className="text-sm font-medium text-neutral-700 block mb-1">תאריך</label>
+              <input
+                type="date"
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                value={expenseDate}
+                onChange={e => setExpenseDate(e.target.value)}
+              />
+            </div>
+
+            {/* קטגוריה */}
+            <div>
+              <label className="text-sm font-medium text-neutral-700 block mb-1.5">קטגוריה</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategory(cat.id)}
+                    className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-xs transition-all ${
+                      category === cat.id
+                        ? 'border-brand-500 bg-brand-50 text-brand-600 font-medium'
+                        : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'
+                    }`}
+                  >
+                    <span className="text-lg">{cat.emoji}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* מי שילם */}
+            <div>
+              <label className="text-sm font-medium text-neutral-700 block mb-1">מי שילם?</label>
               <select
-                className="w-36 border border-neutral-200 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                value={currency}
-                onChange={e => handleCurrencyChange(e.target.value)}
+                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                value={paidByUserId}
+                onChange={e => setPaidBy(e.target.value)}
               >
-                {CURRENCIES.map(c => (
-                  <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
+                {members.map(m => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
-          </div>
 
-          {/* שער המרה (אם לא שקל) */}
-          {currency !== 'ILS' && (
-            <div className="bg-neutral-50 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-neutral-600">
-                  שער המרה: 1 {curInfo.symbol} =
-                </label>
-                <span className="text-xs text-neutral-400">ניתן לשינוי</span>
-              </div>
-              <div className="flex items-center gap-2">
+            {/* סכום + מטבע */}
+            <div>
+              <label className="text-sm font-medium text-neutral-700 block mb-1">סכום</label>
+              <div className="flex gap-2">
                 <input
                   type="number"
-                  min="0.0001"
-                  step="0.0001"
-                  className="w-28 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  value={exchangeRate}
-                  onChange={e => setExchangeRate(parseFloat(e.target.value) || 0)}
+                  min="0"
+                  step="any"
+                  className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
                 />
-                <span className="text-sm text-neutral-600">₪</span>
-                {amountILS > 0 && (
-                  <span className="text-xs text-neutral-500 mr-auto">
-                    ≈ {fmtILS(amountILS)}
-                  </span>
-                )}
+                <select
+                  className="w-36 border border-neutral-200 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                  value={currency}
+                  onChange={e => handleCurrencyChange(e.target.value)}
+                >
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
+                  ))}
+                </select>
               </div>
             </div>
-          )}
 
-          {/* משתתפים */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-sm font-medium text-neutral-700">מחולק בין</label>
-              <button
-                type="button"
-                className="text-xs text-brand-500"
-                onClick={() => setParticipants(
-                  participants.length === members.length ? [] : members.map(m => m.userId)
-                )}
-              >
-                {participants.length === members.length ? 'בטל הכל' : 'בחר הכל'}
-              </button>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {members.map(m => (
-                <label key={m.userId} className="flex items-center gap-2 cursor-pointer">
+            {/* שער המרה (אם לא שקל) */}
+            {currency !== 'ILS' && (
+              <div className="bg-neutral-50 rounded-xl p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-neutral-600">
+                    שער המרה: 1 {curInfo.symbol} =
+                  </label>
+                  <span className="text-xs text-neutral-400">ניתן לשינוי</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <input
-                    type="checkbox"
-                    className="w-4 h-4 accent-brand-500"
-                    checked={participants.includes(m.userId)}
-                    onChange={() => toggleParticipant(m.userId)}
+                    type="number"
+                    min="0.0001"
+                    step="0.0001"
+                    className="w-28 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    value={exchangeRate}
+                    onChange={e => setExchangeRate(parseFloat(e.target.value) || 0)}
                   />
-                  <span className="text-sm text-neutral-800">
-                    {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
-                  </span>
-                  {participants.includes(m.userId) && participants.length > 0 && (
-                    <span className="text-xs text-neutral-400 mr-auto">
-                      {fmtILS(amountILS / participants.length)}
+                  <span className="text-sm text-neutral-600">₪</span>
+                  {amountILS > 0 && (
+                    <span className="text-xs text-neutral-500 mr-auto">
+                      ≈ {fmtILS(amountILS)}
                     </span>
                   )}
-                </label>
-              ))}
+                </div>
+              </div>
+            )}
+
+            {/* משתתפים */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium text-neutral-700">מחולק בין</label>
+                <button
+                  type="button"
+                  className="text-xs text-brand-500"
+                  onClick={() => setParticipants(
+                    participants.length === members.length ? [] : members.map(m => m.userId)
+                  )}
+                >
+                  {participants.length === members.length ? 'בטל הכל' : 'בחר הכל'}
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {members.map(m => (
+                  <label key={m.userId} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-brand-500"
+                      checked={participants.includes(m.userId)}
+                      onChange={() => toggleParticipant(m.userId)}
+                    />
+                    <span className="text-sm text-neutral-800">
+                      {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
+                    </span>
+                    {participants.includes(m.userId) && participants.length > 0 && (
+                      <span className="text-xs text-neutral-400 mr-auto">
+                        {fmtILS(amountILS / participants.length)}
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-          <Button type="submit" size="lg" className="w-full" loading={saving}>
-            {isEdit ? 'שמור שינויים' : 'הוסף הוצאה'}
-          </Button>
-        </form>
+            <Button type="submit" size="lg" className="w-full" loading={saving}>
+              {isEdit ? 'שמור שינויים' : 'הוסף הוצאה'}
+            </Button>
+
+            {/* padding תחתון לבטיחות ב-iOS */}
+            <div className="h-4" />
+          </form>
+        </div>
       </div>
     </div>
   );
@@ -451,7 +473,7 @@ export const ExpensesPage: React.FC = () => {
                       {/* תאריך + עריכה + מחיקה */}
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-neutral-400">
-                          {new Date(exp.createdAt).toLocaleDateString('he-IL')}
+                          {new Date(exp.expenseDate).toLocaleDateString('he-IL')}
                         </span>
                         {canDelete && (
                           <div className="flex items-center gap-3">

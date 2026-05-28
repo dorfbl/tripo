@@ -124,6 +124,7 @@ model TripExpense {
   amountILS    Float                  // amount * exchangeRate
   description  String
   category     String   @default("other")
+  expenseDate  DateTime @default(now())
   createdAt    DateTime @default(now())
 
   trip         Trip                 @relation(fields: [tripId], references: [id])

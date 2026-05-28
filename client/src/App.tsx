@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { useTripStore } from './store/tripStore';
@@ -25,6 +25,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const App: React.FC = () => {
   const { loadUser, token } = useAuthStore();
   const { loadTrips, currentTrip, loadTrip } = useTripStore();
+  const currentTripIdRef = useRef(currentTrip?.id);
+  currentTripIdRef.current = currentTrip?.id;
 
   useEffect(() => {
     if (token) loadUser();
@@ -36,12 +38,12 @@ export const App: React.FC = () => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         loadTrips();
-        if (currentTrip?.id) loadTrip(currentTrip.id);
+        if (currentTripIdRef.current) loadTrip(currentTripIdRef.current);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [token, currentTrip?.id]);
+  }, [token]);
 
   return (
     <BrowserRouter>

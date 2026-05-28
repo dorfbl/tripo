@@ -73,7 +73,7 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
           paidBy:       { select: { id: true, name: true } },
           participants: { include: { user: { select: { id: true, name: true } } } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { expenseDate: 'desc' },
       }),
       prisma.tripMember.findMany({
         where: { tripId },
@@ -95,7 +95,7 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
 export const addExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { tripId } = req.params as { tripId: string };
-    const { paidByUserId, amount, currency, exchangeRate, description, category, participantIds } = req.body;
+    const { paidByUserId, amount, currency, exchangeRate, description, category, participantIds, expenseDate } = req.body;
 
     const member = await prisma.tripMember.findUnique({
       where: { userId_tripId: { userId: req.userId!, tripId } },
@@ -116,6 +116,7 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
     if (!payer) { res.status(400).json({ error: 'מי ששילם אינו חבר בטיול' }); return; }
 
     const amountILS = Math.round(amount * exchangeRate * 100) / 100;
+    const parsedDate = expenseDate ? new Date(expenseDate) : new Date();
 
     const expense = await prisma.tripExpense.create({
       data: {
@@ -127,6 +128,7 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
         amountILS,
         description: description.trim(),
         category: VALID_CATEGORIES.includes(category) ? category : 'other',
+        expenseDate: parsedDate,
         participants: {
           create: (participantIds as string[]).map(uid => ({ userId: uid })),
         },
@@ -148,7 +150,7 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
 export const updateExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { expenseId } = req.params as { expenseId: string };
-    const { paidByUserId, amount, currency, exchangeRate, description, category, participantIds } = req.body;
+    const { paidByUserId, amount, currency, exchangeRate, description, category, participantIds, expenseDate } = req.body;
 
     const expense = await prisma.tripExpense.findUnique({ where: { id: expenseId } });
     if (!expense) { res.status(404).json({ error: 'הוצאה לא נמצאה' }); return; }
@@ -183,6 +185,7 @@ export const updateExpense = async (req: AuthRequest, res: Response): Promise<vo
           amountILS,
           description: description.trim(),
           category: VALID_CATEGORIES.includes(category) ? category : 'other',
+          ...(expenseDate && { expenseDate: new Date(expenseDate) }),
           participants: {
             create: (participantIds as string[]).map((uid: string) => ({ userId: uid })),
           },
