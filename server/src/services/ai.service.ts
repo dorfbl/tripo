@@ -51,8 +51,23 @@ function isBanned(text: string, extraBanned: string[]): boolean {
   return allBanned.some(b => lower.includes(b));
 }
 
+const HEBREW_MONTHS = [
+  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
+];
+
+function formatTripDates(startDate?: Date, endDate?: Date): string {
+  if (!startDate) return '';
+  const start = `${startDate.getDate()} ${HEBREW_MONTHS[startDate.getMonth()]} ${startDate.getFullYear()}`;
+  if (!endDate) return `תאריך הטיול: ${start}`;
+  const end = `${endDate.getDate()} ${HEBREW_MONTHS[endDate.getMonth()]} ${endDate.getFullYear()}`;
+  const nights = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  return `תאריכי הטיול: ${start} עד ${end} (${nights} לילות)`;
+}
+
 export async function generateDestinations(
-  membersAnswers: MemberAnswers[]
+  membersAnswers: MemberAnswers[],
+  tripDates?: { startDate?: Date; endDate?: Date }
 ): Promise<DestinationSuggestion[]> {
   const formattedAnswers = membersAnswers
     .map(
@@ -80,6 +95,8 @@ export async function generateDestinations(
     }
   }
 
+  const tripDatesStr = formatTripDates(tripDates?.startDate, tripDates?.endDate);
+  console.log('[AI] תאריכי טיול:', tripDatesStr || 'לא צוינו');
   console.log('[AI] יעדים אסורים מחברים:', bannedByMembers);
   console.log('[AI] יעדים רצויים מחברים:', wantedByMembers);
 
@@ -97,6 +114,10 @@ export async function generateDestinations(
     ? wantedByMembers.join(', ')
     : 'אין';
 
+  const datesBlock = tripDatesStr
+    ? `\nTRIP DATES: ${tripDatesStr}\n- Match weather/climate to this EXACT travel period\n- If members dislike rain/cold, avoid destinations with bad weather IN THIS SPECIFIC MONTH\n- climate field must describe conditions during the travel month, not annual average`
+    : '';
+
   const systemPrompt = `אתה מומחה לתכנון טיולים קבוצתיים.
 
 !!!CRITICAL RULES - NEVER VIOLATE!!!
@@ -104,10 +125,11 @@ export async function generateDestinations(
 2. NEVER suggest destinations that members explicitly said they don't want: ${bannedMembersStr}
 3. These bans are ABSOLUTE - no exceptions, no matter how good the match seems
 4. Verify every suggestion against the banned list before including it
-
+${datesBlock}
 PRIORITIES (after applying bans):
 - Destinations members explicitly want to visit: ${wantedStr} — give these very high weight
 - Balance preferences across all group members
+- Weather during the trip dates is critical — rainy/cold destinations in wrong season = low score
 
 CONTENT RULES:
 - Suggest smart routes/combinations, not just single cities
@@ -117,7 +139,7 @@ CONTENT RULES:
 - description: one short sentence about the whole route
 - whyItFits: exactly 2 short sentences explaining fit for THIS specific group
 - matchScore: number 0-100
-- climate: 3-5 words
+- climate: weather specifically during ${tripDatesStr || 'the travel period'} (3-5 words)
 - highlights: exactly 3 short items (2-4 words each)
 - Return JSON only, no other text`;
 
@@ -126,6 +148,7 @@ CONTENT RULES:
 ${formattedAnswers}
 
 ⚠️ תזכורת קריטית לפני שאתה מחזיר תשובה:
+${tripDatesStr ? `- תאריכי הטיול: ${tripDatesStr} — בדוק שמזג האוויר ביעד מתאים לחודש זה בפועל!` : ''}
 - יעדים אסורים תמידיים: ${ALWAYS_BANNED_STR}
 - יעדים שחברים לא רוצים: ${bannedMembersStr}
 - אם אחד מהיעדים שהכנת מופיע ברשימות האלו — החלף אותו ביעד אחר לפני שאתה מחזיר!

@@ -53,7 +53,10 @@ export const generate = async (req: AuthRequest, res: Response): Promise<void> =
 
     const membersAnswers = Array.from(memberMap.values()).map((ans) => ({ answers: ans }));
 
-    const suggestions = await generateDestinations(membersAnswers);
+    const suggestions = await generateDestinations(membersAnswers, {
+      startDate: trip.startDate ?? undefined,
+      endDate: trip.endDate ?? undefined,
+    });
 
     // מחק votes לפני destinations (foreign key)
     const existing = await prisma.suggestedDestination.findMany({ where: { tripId }, select: { id: true } });
