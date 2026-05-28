@@ -55,6 +55,12 @@ export const generate = async (req: AuthRequest, res: Response): Promise<void> =
 
     const suggestions = await generateDestinations(membersAnswers);
 
+    // מחק votes לפני destinations (foreign key)
+    const existing = await prisma.suggestedDestination.findMany({ where: { tripId }, select: { id: true } });
+    const ids = existing.map(d => d.id);
+    if (ids.length > 0) {
+      await prisma.destinationVote.deleteMany({ where: { destinationId: { in: ids } } });
+    }
     await prisma.suggestedDestination.deleteMany({ where: { tripId } });
 
     const saved = await prisma.$transaction(
