@@ -73,7 +73,7 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
           paidBy:       { select: { id: true, name: true } },
           participants: { include: { user: { select: { id: true, name: true } } } },
         },
-        orderBy: { expenseDate: 'desc' },
+        orderBy: [{ expenseDate: 'desc' }, { createdAt: 'desc' }],
       }),
       prisma.tripMember.findMany({
         where: { tripId },
