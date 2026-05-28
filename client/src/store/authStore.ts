@@ -10,6 +10,7 @@ interface AuthState {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -46,6 +47,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     localStorage.removeItem('token');
     set({ user: null, token: null });
+  },
+
+  updateProfile: async (name) => {
+    const res = await apiClient.put('/api/auth/profile', { name });
+    set({ user: res.data.user });
   },
 
   loadUser: async () => {

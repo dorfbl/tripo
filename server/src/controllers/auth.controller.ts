@@ -79,6 +79,27 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      res.status(400).json({ error: 'שם הוא שדה חובה' });
+      return;
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.userId },
+      data: { name: name.trim() },
+      select: { id: true, name: true, email: true },
+    });
+
+    res.json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בעדכון הפרופיל' });
+  }
+};
+
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({

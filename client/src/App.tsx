@@ -13,6 +13,7 @@ import { JoinPage } from './pages/JoinPage';
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { EditProfilePage } from './pages/EditProfilePage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token } = useAuthStore();
@@ -56,6 +57,9 @@ export const App: React.FC = () => {
 
         <Route path="/profile" element={
           <ProtectedRoute><ProfilePage /></ProtectedRoute>
+        } />
+        <Route path="/profile/edit" element={
+          <ProtectedRoute><EditProfilePage /></ProtectedRoute>
         } />
 
         <Route path="/admin/questions" element={

@@ -43,13 +43,13 @@ export const ProfilePage: React.FC = () => {
         {/* פעולות */}
         <Card className="overflow-hidden divide-y divide-neutral-100">
 
-          {/* עריכת פרופיל — בקרוב */}
+          {/* עריכת פרופיל */}
           <button
-            disabled
-            className="w-full flex items-center justify-between px-5 py-4 opacity-40 cursor-not-allowed"
+            onClick={() => navigate('/profile/edit')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors"
           >
             <span className="text-sm font-medium text-neutral-800">✏️ עריכת פרופיל</span>
-            <span className="text-xs text-neutral-400">בקרוב</span>
+            <span className="text-neutral-300 text-lg">‹</span>
           </button>
 
           {/* כל הטיולים שלי */}
