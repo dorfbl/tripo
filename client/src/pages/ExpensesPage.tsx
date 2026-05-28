@@ -142,26 +142,24 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
     }
   };
 
-  // ─── מבנה נכון: overlay קבוע + sheet flex-col + header דביק + גוף גלילה ───
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+      className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center overflow-y-auto py-6 px-4"
       onTouchMove={e => e.preventDefault()}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="bg-white w-full rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ maxHeight: '90dvh' }}
+        className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col overflow-hidden my-auto"
         onTouchMove={e => e.stopPropagation()}
       >
-        {/* Header דביק */}
+        {/* Header */}
         <div className="flex-shrink-0 border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
           <h2 className="font-bold text-neutral-900 text-lg">{isEdit ? '✏️ עריכת הוצאה' : '➕ הוצאה חדשה'}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
         </div>
 
-        {/* גוף גלילה */}
-        <div className="overflow-y-auto overscroll-contain flex-1">
+        {/* גוף */}
+        <div className="overflow-x-hidden">
           <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
 
             {/* תיאור */}
