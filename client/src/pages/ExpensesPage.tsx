@@ -150,7 +150,7 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="bg-white w-full rounded-t-2xl shadow-2xl flex flex-col"
+        className="bg-white w-full rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
         style={{ maxHeight: '90dvh' }}
         onTouchMove={e => e.stopPropagation()}
       >
@@ -180,7 +180,7 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
               <label className="text-sm font-medium text-neutral-700 block mb-1">תאריך</label>
               <input
                 type="date"
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                className="w-full min-w-0 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                 value={expenseDate}
                 onChange={e => setExpenseDate(e.target.value)}
               />
