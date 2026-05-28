@@ -170,7 +170,8 @@ export const updateExpense = async (req: AuthRequest, res: Response): Promise<vo
     if (!paidByUserId)                      { res.status(400).json({ error: 'חסר מי שילם' }); return; }
     if (!participantIds?.length)            { res.status(400).json({ error: 'חסרים משתתפים' }); return; }
 
-    const amountILS = Math.round(amount * exchangeRate * 100) / 100;
+    const amountILS  = Math.round(amount * exchangeRate * 100) / 100;
+    const parsedDate = expenseDate ? new Date(expenseDate) : expense.expenseDate;
 
     // עדכון + החלפת משתתפים
     const updated = await prisma.$transaction(async (tx) => {
@@ -185,7 +186,7 @@ export const updateExpense = async (req: AuthRequest, res: Response): Promise<vo
           amountILS,
           description: description.trim(),
           category: VALID_CATEGORIES.includes(category) ? category : 'other',
-          ...(expenseDate && { expenseDate: new Date(expenseDate) }),
+          expenseDate: parsedDate,
           participants: {
             create: (participantIds as string[]).map((uid: string) => ({ userId: uid })),
           },
