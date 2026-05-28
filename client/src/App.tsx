@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { useTripStore } from './store/tripStore';
 
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -23,10 +24,24 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 export const App: React.FC = () => {
   const { loadUser, token } = useAuthStore();
+  const { loadTrips, currentTrip, loadTrip } = useTripStore();
 
   useEffect(() => {
     if (token) loadUser();
   }, []);
+
+  // רענון אוטומטי כשהאפליקציה חוזרת לפוקוס (PWA / tab switch)
+  useEffect(() => {
+    if (!token) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadTrips();
+        if (currentTrip?.id) loadTrip(currentTrip.id);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [token, currentTrip?.id]);
 
   return (
     <BrowserRouter>

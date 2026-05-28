@@ -80,6 +80,18 @@ interface ModalProps {
 const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExpense, onClose, onSaved }) => {
   const isEdit = !!editExpense;
 
+  // נעל גלילת הרקע כשהמודל פתוח
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
+  }, []);
+
   const [description,  setDescription]  = useState(editExpense?.description ?? '');
   const [category,     setCategory]     = useState(editExpense?.category ?? 'other');
   const [paidByUserId, setPaidBy]       = useState(editExpense?.paidBy.id ?? myUserId);
