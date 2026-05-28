@@ -21,6 +21,11 @@
     box-sizing: border-box;
   }
 
+  /* מניעת זום אוטומטי של iOS בלחיצה על input */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
   #root {
     min-height: 100vh;
     min-height: 100dvh;
