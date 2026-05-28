@@ -137,8 +137,8 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto overscroll-contain">
         <div className="sticky top-0 bg-white border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
           <h2 className="font-bold text-neutral-900 text-lg">{isEdit ? '✏️ עריכת הוצאה' : '➕ הוצאה חדשה'}</h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
@@ -521,11 +521,11 @@ export const ExpensesPage: React.FC = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-neutral-900">{s.from.name}</span>
-                      <span className="text-neutral-400 text-sm">→</span>
+                      <span className="text-neutral-400 text-sm">←</span>
                       <span className="font-semibold text-neutral-900">{s.to.name}</span>
                     </div>
                     <p className="text-xs text-neutral-500 mt-0.5">
-                      {s.from.name} חייב ל{s.to.name}
+                      {s.from.name} משלם ל{s.to.name}
                     </p>
                   </div>
                   <div className="text-left">
