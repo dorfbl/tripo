@@ -144,12 +144,13 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center overflow-y-auto py-6 px-4"
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4"
       onTouchMove={e => e.preventDefault()}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col overflow-hidden my-auto"
+        className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxHeight: '88dvh' }}
         onTouchMove={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -158,8 +159,8 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
         </div>
 
-        {/* גוף */}
-        <div className="overflow-x-hidden">
+        {/* גוף גלילה פנימית */}
+        <div className="overflow-y-auto overflow-x-hidden overscroll-contain flex-1">
           <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
 
             {/* תיאור */}
@@ -178,7 +179,7 @@ const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExp
               <label className="text-sm font-medium text-neutral-700 block mb-1">תאריך</label>
               <input
                 type="date"
-                className="w-full min-w-0 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                className="w-1/2 min-w-0 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                 value={expenseDate}
                 onChange={e => setExpenseDate(e.target.value)}
               />
