@@ -71,7 +71,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <AppShell>
+    <AppShell showBottomNav>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-neutral-900">
           {trips.length > 1 ? '✈️ בחר טיול פעיל' : 'הטיולים שלי'}

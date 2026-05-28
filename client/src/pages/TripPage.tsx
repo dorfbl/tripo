@@ -212,6 +212,20 @@ export const TripPage: React.FC = () => {
         </div>
       )}
 
+      {/* ─── אדמין: עריכת שאלות השאלון ─── */}
+      {isAdmin && (
+        <div className="mt-6 pt-5 border-t border-neutral-100">
+          <p className="text-xs text-neutral-400 mb-2 font-medium">כלי מנהל</p>
+          <button
+            onClick={() => navigate('/admin/questions')}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors text-sm text-neutral-600"
+          >
+            <span>⚙️ עריכת שאלות השאלון</span>
+            <span className="text-neutral-300">‹</span>
+          </button>
+        </div>
+      )}
+
     </AppShell>
   );
 };

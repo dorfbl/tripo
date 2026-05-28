@@ -24,19 +24,7 @@ export const Navbar: React.FC = () => {
                   הטיולים שלי
                 </Link>
               )}
-              {['test@test.com', 'dorfbl@gmail.com'].includes(user.email) && (
-                <Link
-                  to="/admin/questions"
-                  className={`text-sm transition-colors ${
-                    location.pathname === '/admin/questions'
-                      ? 'text-brand-600 font-medium'
-                      : 'text-neutral-400 hover:text-neutral-600'
-                  }`}
-                >
-                  ⚙️ שאלון
-                </Link>
-              )}
-              <button
+<button
                 onClick={logout}
                 className="text-sm text-neutral-400 hover:text-neutral-600 transition-colors"
               >
