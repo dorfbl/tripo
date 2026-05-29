@@ -70,14 +70,14 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
       prisma.tripExpense.findMany({
         where: { tripId },
         include: {
-          paidBy:       { select: { id: true, name: true } },
-          participants: { include: { user: { select: { id: true, name: true } } } },
+          paidBy:       { select: { id: true, name: true, avatarUrl: true } },
+          participants: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
         },
         orderBy: [{ expenseDate: 'desc' }, { createdAt: 'desc' }],
       }),
       prisma.tripMember.findMany({
         where: { tripId },
-        include: { user: { select: { id: true, name: true } } },
+        include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       }),
     ]);
 
@@ -134,8 +134,8 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
         },
       },
       include: {
-        paidBy:       { select: { id: true, name: true } },
-        participants: { include: { user: { select: { id: true, name: true } } } },
+        paidBy:       { select: { id: true, name: true, avatarUrl: true } },
+        participants: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
     });
 
@@ -192,8 +192,8 @@ export const updateExpense = async (req: AuthRequest, res: Response): Promise<vo
           },
         },
         include: {
-          paidBy:       { select: { id: true, name: true } },
-          participants: { include: { user: { select: { id: true, name: true } } } },
+          paidBy:       { select: { id: true, name: true, avatarUrl: true } },
+          participants: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
         },
       });
     });

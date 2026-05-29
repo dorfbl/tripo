@@ -27,7 +27,7 @@ export interface TripMember {
   role: 'ADMIN' | 'MEMBER';
   joinedAt: string;
   completedQuestionnaire: boolean;
-  user: { id: string; name: string; email?: string };
+  user: { id: string; name: string; email?: string; avatarUrl?: string | null };
 }
 
 export interface Question {

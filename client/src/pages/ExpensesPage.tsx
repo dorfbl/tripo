@@ -1,35 +1,34 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
 // ─── קבועים ────────────────────────────────────────────────────────────────────
-const CURRENCIES: { code: string; symbol: string; label: string; defaultRate: number }[] = [
-  { code: 'ILS', symbol: '₪', label: 'שקל (₪)',       defaultRate: 1     },
-  { code: 'USD', symbol: '$', label: 'דולר ($)',       defaultRate: 3.70  },
-  { code: 'EUR', symbol: '€', label: 'אירו (€)',       defaultRate: 4.05  },
-  { code: 'GBP', symbol: '£', label: 'פאונד (£)',      defaultRate: 4.75  },
-  { code: 'CHF', symbol: '₣', label: 'פרנק שוויצרי',  defaultRate: 4.20  },
-  { code: 'JPY', symbol: '¥', label: 'ין יפני (¥)',    defaultRate: 0.025 },
-  { code: 'THB', symbol: '฿', label: 'באט תאילנדי (฿)',defaultRate: 0.106 },
-  { code: 'CZK', symbol: 'Kč',label: 'קורונה צ׳כית',  defaultRate: 0.165 },
-  { code: 'HUF', symbol: 'Ft',label: 'פורינט הונגרי',  defaultRate: 0.010 },
-  { code: 'PLN', symbol: 'zł',label: 'זלוטי פולני (zł)',defaultRate: 0.95 },
-  { code: 'AUD', symbol: 'A$',label: 'דולר אוסטרלי',  defaultRate: 2.40  },
-  { code: 'CAD', symbol: 'C$',label: 'דולר קנדי',      defaultRate: 2.70  },
+const CURRENCIES: { code: string; symbol: string }[] = [
+  { code: 'ILS', symbol: '₪'  },
+  { code: 'USD', symbol: '$'  },
+  { code: 'EUR', symbol: '€'  },
+  { code: 'GBP', symbol: '£'  },
+  { code: 'CHF', symbol: '₣'  },
+  { code: 'JPY', symbol: '¥'  },
+  { code: 'THB', symbol: '฿'  },
+  { code: 'CZK', symbol: 'Kč' },
+  { code: 'HUF', symbol: 'Ft' },
+  { code: 'PLN', symbol: 'zł' },
+  { code: 'AUD', symbol: 'A$' },
+  { code: 'CAD', symbol: 'C$' },
 ];
 
 const CATEGORIES: { id: string; label: string; emoji: string }[] = [
-  { id: 'food',          label: 'אוכל ושתייה',    emoji: '🍽️' },
-  { id: 'accommodation', label: 'לינה',           emoji: '🏨' },
-  { id: 'transport',     label: 'תחבורה',         emoji: '🚗' },
-  { id: 'activities',    label: 'פעילויות',        emoji: '🎭' },
-  { id: 'shopping',      label: 'קניות',           emoji: '🛍️' },
-  { id: 'health',        label: 'בריאות',          emoji: '💊' },
-  { id: 'other',         label: 'אחר',             emoji: '📌' },
+  { id: 'food',          label: 'אוכל ושתייה',  emoji: '🍽️' },
+  { id: 'accommodation', label: 'לינה',         emoji: '🏨' },
+  { id: 'transport',     label: 'תחבורה',       emoji: '🚗' },
+  { id: 'activities',    label: 'פעילויות',      emoji: '🎭' },
+  { id: 'shopping',      label: 'קניות',         emoji: '🛍️' },
+  { id: 'health',        label: 'בריאות',        emoji: '💊' },
+  { id: 'other',         label: 'אחר',           emoji: '📌' },
 ];
 
 // ─── טיפוסים ───────────────────────────────────────────────────────────────────
@@ -68,278 +67,18 @@ const fmtAmt = (amount: number, currency: string) => {
 
 const catInfo = (id: string) => CATEGORIES.find(c => c.id === id) ?? { emoji: '📌', label: 'אחר' };
 
-// ─── קומפוננט ExpenseModal (הוספה + עריכה) ────────────────────────────────────
-interface ModalProps {
-  tripId:       string;
-  members:      TripMemberFull[];
-  myUserId:     string;
-  editExpense?: Expense;          // אם מסופק — מצב עריכה
-  onClose:      () => void;
-  onSaved:      (exp: Expense) => void;
-}
-
-const todayStr = () => new Date().toISOString().slice(0, 10);
-
-const ExpenseModal: React.FC<ModalProps> = ({ tripId, members, myUserId, editExpense, onClose, onSaved }) => {
-  const isEdit = !!editExpense;
-
-  const [description,  setDescription]  = useState(editExpense?.description ?? '');
-  const [category,     setCategory]     = useState(editExpense?.category ?? 'other');
-  const [paidByUserId, setPaidBy]       = useState(editExpense?.paidBy.id ?? myUserId);
-  const [amount,       setAmount]       = useState(editExpense ? String(editExpense.amount) : '');
-  const [currency,     setCurrency]     = useState(editExpense?.currency ?? 'ILS');
-  const [exchangeRate, setExchangeRate] = useState(editExpense?.exchangeRate ?? 1);
-  const [expenseDate,  setExpenseDate]  = useState(
-    editExpense?.expenseDate ? editExpense.expenseDate.slice(0, 10) : todayStr()
-  );
-  const [participants, setParticipants] = useState<string[]>(
-    editExpense ? editExpense.participants.map(p => p.userId) : members.map(m => m.userId)
-  );
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState('');
-
-  const curInfo   = CURRENCIES.find(c => c.code === currency)!;
-  const amountILS = amount ? Math.round(parseFloat(amount) * exchangeRate * 100) / 100 : 0;
-
-  const handleCurrencyChange = (code: string) => {
-    setCurrency(code);
-    if (!editExpense || code !== editExpense.currency) {
-      setExchangeRate(CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1);
-    }
-  };
-
-  const toggleParticipant = (uid: string) => {
-    setParticipants(prev =>
-      prev.includes(uid) ? prev.filter(p => p !== uid) : [...prev, uid]
-    );
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!description.trim())     { setError('חובה להזין תיאור'); return; }
-    if (!amount || +amount <= 0) { setError('חובה להזין סכום חיובי'); return; }
-    if (!participants.length)    { setError('חובה לבחור לפחות משתתף אחד'); return; }
-
-    setSaving(true);
-    try {
-      const payload = {
-        description, category, paidByUserId,
-        amount: parseFloat(amount),
-        currency, exchangeRate,
-        expenseDate,
-        participantIds: participants,
-      };
-      const res = isEdit
-        ? await apiClient.put(`/api/expenses/${editExpense!.id}`, payload)
-        : await apiClient.post(`/api/expenses/${tripId}`, payload);
-      onSaved(res.data.expense);
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(e.response?.data?.error ?? (isEdit ? 'שגיאה בעדכון' : 'שגיאה בהוספה'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4"
-      onTouchMove={e => e.preventDefault()}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="bg-white w-full max-w-sm rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ maxHeight: '88dvh' }}
-        onTouchMove={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex-shrink-0 border-b border-neutral-100 px-5 py-4 flex items-center justify-between">
-          <h2 className="font-bold text-neutral-900 text-lg">{isEdit ? '✏️ עריכת הוצאה' : '➕ הוצאה חדשה'}</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-2xl leading-none">×</button>
-        </div>
-
-        {/* גוף גלילה פנימית */}
-        <div className="overflow-y-auto overflow-x-hidden overscroll-contain flex-1">
-          <form onSubmit={handleSubmit} className="px-5 py-4 flex flex-col gap-4">
-
-            {/* תיאור */}
-            <div>
-              <label className="text-sm font-medium text-neutral-700 block mb-1">תיאור</label>
-              <input
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                placeholder="למשל: ארוחת ערב ברסטורנט, מונית לשדה..."
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-              />
-            </div>
-
-            {/* תאריך */}
-            <div>
-              <label className="text-sm font-medium text-neutral-700 block mb-1">תאריך</label>
-              <input
-                type="date"
-                className="w-1/2 min-w-0 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                value={expenseDate}
-                onChange={e => setExpenseDate(e.target.value)}
-              />
-            </div>
-
-            {/* קטגוריה */}
-            <div>
-              <label className="text-sm font-medium text-neutral-700 block mb-1.5">קטגוריה</label>
-              <div className="grid grid-cols-4 gap-1.5">
-                {CATEGORIES.map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setCategory(cat.id)}
-                    className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-xs transition-all ${
-                      category === cat.id
-                        ? 'border-brand-500 bg-brand-50 text-brand-600 font-medium'
-                        : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'
-                    }`}
-                  >
-                    <span className="text-lg">{cat.emoji}</span>
-                    <span>{cat.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* מי שילם */}
-            <div>
-              <label className="text-sm font-medium text-neutral-700 block mb-1">מי שילם?</label>
-              <select
-                className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                value={paidByUserId}
-                onChange={e => setPaidBy(e.target.value)}
-              >
-                {members.map(m => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* סכום + מטבע */}
-            <div>
-              <label className="text-sm font-medium text-neutral-700 block mb-1">סכום</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                />
-                <select
-                  className="w-36 border border-neutral-200 rounded-xl px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-                  value={currency}
-                  onChange={e => handleCurrencyChange(e.target.value)}
-                >
-                  {CURRENCIES.map(c => (
-                    <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* שער המרה (אם לא שקל) */}
-            {currency !== 'ILS' && (
-              <div className="bg-neutral-50 rounded-xl p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-medium text-neutral-600">
-                    שער המרה: 1 {curInfo.symbol} =
-                  </label>
-                  <span className="text-xs text-neutral-400">ניתן לשינוי</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0.0001"
-                    step="0.0001"
-                    className="w-28 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    value={exchangeRate}
-                    onChange={e => setExchangeRate(parseFloat(e.target.value) || 0)}
-                  />
-                  <span className="text-sm text-neutral-600">₪</span>
-                  {amountILS > 0 && (
-                    <span className="text-xs text-neutral-500 mr-auto">
-                      ≈ {fmtILS(amountILS)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* משתתפים */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-neutral-700">מחולק בין</label>
-                <button
-                  type="button"
-                  className="text-xs text-brand-500"
-                  onClick={() => setParticipants(
-                    participants.length === members.length ? [] : members.map(m => m.userId)
-                  )}
-                >
-                  {participants.length === members.length ? 'בטל הכל' : 'בחר הכל'}
-                </button>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {members.map(m => (
-                  <label key={m.userId} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-brand-500"
-                      checked={participants.includes(m.userId)}
-                      onChange={() => toggleParticipant(m.userId)}
-                    />
-                    <span className="text-sm text-neutral-800">
-                      {m.user.name}{m.userId === myUserId ? ' (אני)' : ''}
-                    </span>
-                    {participants.includes(m.userId) && participants.length > 0 && (
-                      <span className="text-xs text-neutral-400 mr-auto">
-                        {fmtILS(amountILS / participants.length)}
-                      </span>
-                    )}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-
-            <Button type="submit" size="lg" className="w-full" loading={saving}>
-              {isEdit ? 'שמור שינויים' : 'הוסף הוצאה'}
-            </Button>
-
-            {/* padding תחתון לבטיחות ב-iOS */}
-            <div className="h-4" />
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ─── קומפוננט ראשי ────────────────────────────────────────────────────────────
 export const ExpensesPage: React.FC = () => {
   const { id: tripId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
 
   const [expenses,    setExpenses]    = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [members,     setMembers]     = useState<TripMemberFull[]>([]);
   const [totalILS,    setTotalILS]    = useState(0);
-  const [loading,       setLoading]       = useState(true);
-  const [showModal,     setShowModal]     = useState(false);
-  const [editingExpense,setEditingExpense] = useState<Expense | null>(null);
-  const [activeTab,     setActiveTab]     = useState<'expenses' | 'settlements'>('expenses');
+  const [loading,     setLoading]     = useState(true);
+  const [activeTab,   setActiveTab]   = useState<'expenses' | 'settlements'>('expenses');
   const [deleting,    setDeleting]    = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -354,9 +93,7 @@ export const ExpensesPage: React.FC = () => {
     finally { setLoading(false); }
   }, [tripId]);
 
-  useEffect(() => {
-    load();
-  }, [load, tripId]);
+  useEffect(() => { load(); }, [load, tripId]);
 
   // רענון כשחוזרים לדף (iOS PWA)
   useEffect(() => {
@@ -368,12 +105,6 @@ export const ExpensesPage: React.FC = () => {
       window.removeEventListener('focus', load);
     };
   }, [load]);
-
-  const handleSaved = (_exp: Expense) => {
-    setShowModal(false);
-    setEditingExpense(null);
-    load(); // טעינה מחדש לעדכון settlements ו-totalILS
-  };
 
   const handleDelete = async (expenseId: string) => {
     if (!confirm('למחוק הוצאה זו?')) return;
@@ -393,14 +124,11 @@ export const ExpensesPage: React.FC = () => {
     <AppShell showBottomNav>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">💸 הוצאות</h1>
-          <p className="text-sm text-neutral-400 mt-0.5">
-            {expenses.length} הוצאות • סה״כ {fmtILS(totalILS)}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => { setEditingExpense(null); setShowModal(true); }}>+ הוצאה</Button>
+      <div className="mb-5">
+        <h1 className="text-2xl font-bold text-neutral-900">💸 הוצאות</h1>
+        <p className="text-sm text-neutral-400 mt-0.5">
+          {expenses.length} הוצאות • סה״כ {fmtILS(totalILS)}
+        </p>
       </div>
 
       {/* Tabs */}
@@ -427,13 +155,13 @@ export const ExpensesPage: React.FC = () => {
             <div className="text-center py-12 text-neutral-400">
               <div className="text-4xl mb-3">💸</div>
               <p className="font-medium">אין הוצאות עדיין</p>
-              <p className="text-sm mt-1">לחץ + הוצאה כדי להתחיל לעקוב</p>
+              <p className="text-sm mt-1">לחץ + כדי להוסיף הוצאה</p>
             </div>
           ) : (
             expenses.map(exp => {
               const cat = catInfo(exp.category);
               const canDelete = exp.paidBy.id === user?.id ||
-                members.find(m => m.userId === user?.id)?.role === 'ADMIN'; // role ב-TripMemberFull
+                members.find(m => m.userId === user?.id)?.role === 'ADMIN';
               return (
                 <Card key={exp.id} className="p-4">
                   <div className="flex items-start gap-3">
@@ -488,7 +216,7 @@ export const ExpensesPage: React.FC = () => {
                         {canDelete && (
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => { setEditingExpense(exp); setShowModal(true); }}
+                              onClick={() => navigate(`/trip/${tripId}/expenses/edit/${exp.id}`)}
                               className="text-xs text-brand-500 hover:text-brand-700 transition-colors"
                             >
                               ✏️ ערוך
@@ -520,7 +248,6 @@ export const ExpensesPage: React.FC = () => {
             <h3 className="font-semibold text-neutral-800 mb-3">יתרות לפי חבר</h3>
             <div className="flex flex-col gap-2">
               {members.map(m => {
-                // חשב יתרה של חבר זה
                 let net = 0;
                 for (const exp of expenses) {
                   const parts = exp.participants.map(p => p.userId);
@@ -588,16 +315,19 @@ export const ExpensesPage: React.FC = () => {
         </div>
       )}
 
-      {showModal && (
-        <ExpenseModal
-          tripId={tripId!}
-          members={members}
-          myUserId={user!.id}
-          editExpense={editingExpense ?? undefined}
-          onClose={() => { setShowModal(false); setEditingExpense(null); }}
-          onSaved={handleSaved}
-        />
-      )}
+      {/* FAB — הוצאה חדשה */}
+      <button
+        className="fixed z-40 w-14 h-14 bg-brand-500 text-white rounded-full shadow-xl flex items-center justify-center active:bg-brand-600 transition-colors"
+        style={{ bottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 16px)', left: '50%', transform: 'translateX(-50%)' }}
+        onClick={() => navigate(`/trip/${tripId}/expenses/new`)}
+        aria-label="הוסף הוצאה"
+      >
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+
     </AppShell>
   );
 };

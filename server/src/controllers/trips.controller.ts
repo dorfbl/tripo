@@ -34,7 +34,7 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
       },
       include: {
         members: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
         },
       },
     });
@@ -54,7 +54,7 @@ export const getTrips = async (req: AuthRequest, res: Response): Promise<void> =
       },
       include: {
         members: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
         _count: { select: { destinations: true } },
       },
@@ -76,7 +76,7 @@ export const getTrip = async (req: AuthRequest, res: Response): Promise<void> =>
       where: { id },
       include: {
         members: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
         },
         destinations: {
           include: {
@@ -147,7 +147,7 @@ export const getTripMembers = async (req: AuthRequest, res: Response): Promise<v
 
     const members = await prisma.tripMember.findMany({
       where: { tripId: id },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
     });
 
     const isMember = members.some((m) => m.userId === req.userId);

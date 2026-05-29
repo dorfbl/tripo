@@ -138,7 +138,7 @@ export const TripPage: React.FC = () => {
             return (
               <div key={member.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Avatar name={member.user.name} size="sm" />
+                  <Avatar name={member.user.name} avatarUrl={member.user.avatarUrl} size="sm" />
                   <span className="text-sm font-medium text-neutral-800">
                     {member.user.name}
                     {member.role === 'ADMIN' && <span className="mr-1 text-xs">👑</span>}

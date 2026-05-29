@@ -3,18 +3,25 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  envDir: '../',   // .env נמצא בשורש הפרויקט, לא ב-client/
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        skipWaiting: true,      // SW חדש לא ממתין — מפעיל מיד
+        clientsClaim: true,     // לוקח שליטה על כל הtabs מיד
+        // אל תשמור cache על HTML — תמיד טען מהרשת
+        navigateFallbackDenylist: [],
+        runtimeCaching: [],
+      },
       manifest: {
         name: 'TRIPO',
         short_name: 'TRIPO',
         description: 'תכנון טיולים קבוצתיים',
         theme_color: '#4F6EF7',
-        background_color: '#4F6EF7',
-        display: 'fullscreen',
-        display_override: ['window-controls-overlay', 'fullscreen', 'standalone'],
+        background_color: '#ffffff',
+        display: 'standalone',
         orientation: 'portrait',
         lang: 'he',
         dir: 'rtl',

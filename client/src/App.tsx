@@ -13,6 +13,8 @@ import { DestinationsPage } from './pages/DestinationsPage';
 import { JoinPage } from './pages/JoinPage';
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage';
 import { ExpensesPage } from './pages/ExpensesPage';
+import { ExpenseFormPage } from './pages/ExpenseFormPage';
+import { MapPage } from './pages/MapPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { EditProfilePage } from './pages/EditProfilePage';
 
@@ -84,6 +86,15 @@ export const App: React.FC = () => {
 
         <Route path="/trip/:id/expenses" element={
           <ProtectedRoute><ExpensesPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/expenses/new" element={
+          <ProtectedRoute><ExpenseFormPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/expenses/edit/:expenseId" element={
+          <ProtectedRoute><ExpenseFormPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/map" element={
+          <ProtectedRoute><MapPage /></ProtectedRoute>
         } />
 
         <Route path="/profile" element={

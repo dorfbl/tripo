@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { prisma } from '../lib/prisma';
 import { config } from '../config/env';
 import { AuthRequest } from '../middleware/auth';
@@ -38,7 +39,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     res.status(201).json({
       token,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl },
     });
   } catch (err) {
     console.error(err);
@@ -73,7 +74,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl },
     });
   } catch (err) {
     console.error(err);
@@ -98,7 +99,21 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
       if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     }
 
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    // כיווץ התמונה ל-200×200 JPEG איכות 82 (≈40-70KB)
+    const originalPath = req.file.path;
+    const filename     = `${path.basename(req.file.filename, path.extname(req.file.filename))}.jpg`;
+    const outputPath   = path.join('/home/dor/tripo/uploads/avatars', filename);
+
+    await sharp(originalPath)
+      .rotate()                          // תקן orientation מ-EXIF
+      .resize(200, 200, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toFile(outputPath);
+
+    // מחק את הקובץ המקורי אם שם הקובץ שונה (HEIC → jpg)
+    if (originalPath !== outputPath) fs.unlinkSync(originalPath);
+
+    const avatarUrl = `/uploads/avatars/${filename}`;
     const user = await prisma.user.update({
       where: { id: req.userId },
       data: { avatarUrl },
