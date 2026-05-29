@@ -74,10 +74,9 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-100 z-[9999]"
+      className="fixed left-0 right-0 bottom-0 bg-white border-t border-neutral-100 z-[9999]"
       style={{
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)',
-        marginBottom: 'calc(-1 * env(safe-area-inset-bottom, 0px))',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
       }}
     >
       <div className="flex max-w-2xl mx-auto">
