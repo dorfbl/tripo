@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
-import { AppShell, NAV_H } from '../components/layout/AppShell';
+import { AppShell } from '../components/layout/AppShell';
+
+const NAV_H = 64;
 import apiClient from '../api/client';
 
 const GKEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;

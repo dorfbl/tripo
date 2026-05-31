@@ -74,9 +74,9 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav
-      className="fixed left-0 right-0 bottom-0 bg-white border-t border-neutral-100 z-[9999]"
+      className="fixed bottom-0 right-0 left-0 z-[9999] bg-white border-t border-neutral-100"
       style={{
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 6px)',
       }}
     >
       <div className="flex max-w-2xl mx-auto">
@@ -84,14 +84,15 @@ export const BottomNav: React.FC = () => {
           <button
             key={tab.id}
             onClick={tab.onClick}
-            className={`flex-1 flex flex-col items-center pt-2 pb-1.5 gap-0.5 transition-colors ${
+            className={`flex-1 relative flex flex-col items-center justify-center py-3 gap-1 transition-colors ${
               tab.active ? 'text-brand-500' : 'text-neutral-400'
             }`}
           >
+            {tab.active && (
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-brand-500 rounded-b-full" />
+            )}
             {tab.icon(tab.active)}
-            <span className={`text-[10px] leading-none ${tab.active ? 'font-semibold' : 'font-medium'}`}>
-              {tab.label}
-            </span>
+            <span className="text-xs font-bold">{tab.label}</span>
           </button>
         ))}
       </div>

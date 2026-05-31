@@ -5,48 +5,29 @@
 @tailwind utilities;
 
 @layer base {
-  html,
-  body,
-  #root {
-    width: 100%;
-    min-height: 100%;
-    margin: 0;
-    padding: 0;
-    background: #ffffff;
-  }
-
-  html,
-  body {
-    direction: rtl;
-    overflow-x: hidden;
-    overscroll-behavior: none;
-  }
-
-  body {
-    font-family: "Heebo", sans-serif;
-    color: #171717;
-  }
-
   * {
     box-sizing: border-box;
   }
 
-  #root {
-    min-height: 100vh;
-    min-height: 100svh;
-    min-height: -webkit-fill-available;
-    padding-top: env(safe-area-inset-top);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+  html {
+    direction: rtl;
+    font-family: "Heebo", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    background-color: #ffffff;
+  }
+
+  body {
+    margin: 0;
+    background-color: #ffffff;
+    color: #171717;
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overscroll-behavior: none;
   }
 }
 
-
-/*
-  מניעת זום אוטומטי של iOS בלחיצה על input.
-  חייב להיות מחוץ לכל @layer — כי unlayered rules גוברות על utilities layer.
-  touch-action: manipulation מבטל גם את ה-double-tap zoom.
-*/
+/* מניעת זום אוטומטי של iOS בלחיצה על input */
 input,
 input[type="text"],
 input[type="email"],
@@ -61,3 +42,4 @@ select {
   touch-action: manipulation;
   max-width: 100%;
 }
+
