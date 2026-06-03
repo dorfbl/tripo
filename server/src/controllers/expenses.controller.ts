@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
 // ─── קטגוריות ─────────────────────────────────────────────────────────────────
-const VALID_CATEGORIES = ['food', 'accommodation', 'transport', 'activities', 'shopping', 'health', 'other'];
+const VALID_CATEGORIES = ['food', 'accommodation', 'transport', 'activities', 'shopping', 'health', 'other', 'repayment'];
 
 // ─── אלגוריתם מינימום עסקאות ──────────────────────────────────────────────────
 interface BalanceEntry { userId: string; name: string; net: number }
@@ -66,7 +66,7 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
     });
     if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
 
-    const [expenses, members] = await Promise.all([
+    const [expenses, members, trip] = await Promise.all([
       prisma.tripExpense.findMany({
         where: { tripId },
         include: {
@@ -79,12 +79,14 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
         where: { tripId },
         include: { user: { select: { id: true, name: true, avatarUrl: true } } },
       }),
+      prisma.trip.findUnique({ where: { id: tripId }, select: { defaultCurrency: true } }),
     ]);
 
-    const settlements = calcSettlements(expenses, members);
-    const totalILS    = expenses.reduce((s, e) => s + e.amountILS, 0);
+    const defaultCurrency = trip?.defaultCurrency ?? 'ILS';
+    const settlements     = calcSettlements(expenses, members);
+    const totalILS        = expenses.filter(e => e.category !== 'repayment').reduce((s, e) => s + e.amountILS, 0);
 
-    res.json({ expenses, settlements, totalILS, members });
+    res.json({ expenses, settlements, totalILS, members, defaultCurrency });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בטעינת הוצאות' });

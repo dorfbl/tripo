@@ -9,6 +9,21 @@ import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import apiClient from '../api/client';
 
+const CURRENCIES = [
+  { code: 'ILS', label: '₪ שקל' },
+  { code: 'USD', label: '$ דולר' },
+  { code: 'EUR', label: '€ יורו' },
+  { code: 'GBP', label: '£ פאונד' },
+  { code: 'CHF', label: '₣ פרנק שוויצרי' },
+  { code: 'JPY', label: '¥ ין יפני' },
+  { code: 'THB', label: '฿ בהט תאילנדי' },
+  { code: 'CZK', label: 'Kč קורונה צ\'כית' },
+  { code: 'HUF', label: 'Ft פורינט הונגרי' },
+  { code: 'PLN', label: 'zł זלוטי פולני' },
+  { code: 'AUD', label: 'A$ דולר אוסטרלי' },
+  { code: 'CAD', label: 'C$ דולר קנדי' },
+];
+
 const STATUS_LABEL: Record<string, string> = {
   PLANNING: 'תכנון',
   VOTING: 'הצבעות',
@@ -26,6 +41,7 @@ export const TripPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
+  const [savingCurrency, setSavingCurrency] = useState(false);
   const [questStatus, setQuestStatus] = useState<{
     total: number; completed: number;
     members: { userId: string; name: string; completed: boolean }[];
@@ -47,6 +63,16 @@ export const TripPage: React.FC = () => {
       const res = await apiClient.get(`/api/questionnaire/${tripId}/status`);
       setQuestStatus(res.data);
     } catch { /* ignore */ }
+  };
+
+  const handleCurrencyChange = async (code: string) => {
+    if (!id) return;
+    setSavingCurrency(true);
+    try {
+      await apiClient.patch(`/api/trips/${id}/currency`, { defaultCurrency: code });
+      loadTrip(id);
+    } catch { /* ignore */ }
+    finally { setSavingCurrency(false); }
   };
 
   const copyInvite = () => {
@@ -212,10 +238,26 @@ export const TripPage: React.FC = () => {
         </div>
       )}
 
-      {/* ─── אדמין: עריכת שאלות השאלון ─── */}
+      {/* ─── אדמין: כלי מנהל ─── */}
       {isAdmin && (
         <div className="mt-6 pt-5 border-t border-neutral-100">
-          <p className="text-xs text-neutral-400 mb-2 font-medium">כלי מנהל</p>
+          <p className="text-xs text-neutral-400 mb-3 font-medium">כלי מנהל</p>
+
+          {/* מטבע ברירת מחדל */}
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 mb-2">
+            <span className="text-sm text-neutral-600">💱 מטבע ברירת מחדל</span>
+            <select
+              value={currentTrip.defaultCurrency}
+              onChange={e => handleCurrencyChange(e.target.value)}
+              disabled={savingCurrency}
+              className="text-sm font-medium text-brand-600 bg-transparent border-none outline-none cursor-pointer disabled:opacity-50"
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={() => navigate('/admin/questions')}
             className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors text-sm text-neutral-600"

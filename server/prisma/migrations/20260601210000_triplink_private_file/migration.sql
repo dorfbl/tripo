@@ -1,0 +1,3 @@
+ALTER TABLE "TripLink" ADD COLUMN "isPrivate" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "TripLink" ADD COLUMN "fileUrl" TEXT;
+ALTER TABLE "TripLink" ADD COLUMN "fileName" TEXT;

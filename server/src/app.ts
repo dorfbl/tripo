@@ -9,6 +9,8 @@ import adminRoutes from './routes/admin.routes';
 import expensesRoutes from './routes/expenses.routes';
 import placesRoutes from './routes/places.routes';
 import geocodeRoutes from './routes/geocode.routes';
+import decisionsRoutes from './routes/decisions.routes';
+import linksRoutes from './routes/links.routes';
 
 const app = express();
 
@@ -45,6 +47,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/expenses', expensesRoutes);
 app.use('/api/places', placesRoutes);
 app.use('/api/geocode', geocodeRoutes);
+app.use('/api/decisions', decisionsRoutes);
+app.use('/api/links', linksRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

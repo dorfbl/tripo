@@ -15,6 +15,11 @@ import { AdminQuestionsPage } from './pages/AdminQuestionsPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ExpenseFormPage } from './pages/ExpenseFormPage';
 import { MapPage } from './pages/MapPage';
+import { DecisionsPage } from './pages/DecisionsPage';
+import { CreateDecisionPage } from './pages/CreateDecisionPage';
+import { LinksPage } from './pages/LinksPage';
+import { CreateLinkPage } from './pages/CreateLinkPage';
+import { EditLinkPage } from './pages/EditLinkPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { EditProfilePage } from './pages/EditProfilePage';
 
@@ -95,6 +100,22 @@ export const App: React.FC = () => {
         } />
         <Route path="/trip/:id/map" element={
           <ProtectedRoute><MapPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/decisions" element={
+          <ProtectedRoute><DecisionsPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/decisions/new" element={
+          <ProtectedRoute><CreateDecisionPage /></ProtectedRoute>
+        } />
+
+        <Route path="/trip/:id/links" element={
+          <ProtectedRoute><LinksPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/links/new" element={
+          <ProtectedRoute><CreateLinkPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/links/edit/:linkId" element={
+          <ProtectedRoute><EditLinkPage /></ProtectedRoute>
         } />
 
         <Route path="/profile" element={

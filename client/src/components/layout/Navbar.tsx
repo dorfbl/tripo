@@ -1,42 +1,44 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { Avatar } from '../ui/Avatar';
 
 export const Navbar: React.FC = () => {
-  const { user, logout } = useAuthStore();
-  const location = useLocation();
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
 
   return (
-    <header className="bg-white border-b border-neutral-200 sticky top-0 z-50">
+    <header className="bg-white border-b border-neutral-100 sticky top-0 z-50">
       <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link to="/" className="font-bold text-brand-500 text-lg tracking-tight">
-          ✈️ TRIPO
+          TRIPO ✈️
         </Link>
+        {user && (
+          <button onClick={() => navigate('/profile')} className="flex items-center gap-2">
+            <span className="text-sm text-neutral-500 hidden sm:block">{user.name}</span>
+            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+          </button>
+        )}
+      </div>
+    </header>
+  );
+};
 
-        <nav className="flex items-center gap-3">
-          {user ? (
-            <>
-              <span className="text-sm text-neutral-600 hidden sm:block">
-                שלום, {user.name}
-              </span>
-              {location.pathname !== '/' && (
-                <Link to="/" className="text-sm text-neutral-600 hover:text-neutral-900">
-                  הטיולים שלי
-                </Link>
-              )}
-<button
-                onClick={logout}
-                className="text-sm text-neutral-400 hover:text-neutral-600 transition-colors"
-              >
-                יציאה
-              </button>
-            </>
-          ) : (
-            <Link to="/login" className="text-sm text-brand-500 font-medium">
-              כניסה
-            </Link>
-          )}
-        </nav>
+export const TripTopBar: React.FC = () => {
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  return (
+    <header className="fixed top-0 right-0 left-0 z-50 bg-white border-b border-neutral-100 h-14">
+      <div className="max-w-2xl mx-auto px-4 h-full flex items-center justify-between">
+        <Link to="/" className="font-bold text-brand-500 text-base tracking-tight">
+          TRIPO ✈️
+        </Link>
+        {user && (
+          <button onClick={() => navigate('/profile')} className="active:opacity-70">
+            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+          </button>
+        )}
       </div>
     </header>
   );

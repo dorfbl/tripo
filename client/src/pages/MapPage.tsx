@@ -1,6 +1,16 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { GoogleMap, useJsApiLoader, Marker, Polyline, InfoWindow } from '@react-google-maps/api';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy,
+  useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { AppShell } from '../components/layout/AppShell';
 
 const NAV_H = 64;
@@ -97,7 +107,7 @@ const AddPlaceModal: React.FC<AddPlaceModalProps> = ({ tripId, onClose, onAdded 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[1000] flex items-end justify-center"
+    <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end justify-center"
       onTouchMove={e => e.preventDefault()}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -233,7 +243,7 @@ const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[1000] flex items-end justify-center"
+    <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end justify-center"
       onTouchMove={e => e.preventDefault()}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -254,10 +264,16 @@ const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
             <a href={`https://www.google.com/maps?q=${place.lat},${place.lng}`}
               target="_blank" rel="noopener noreferrer"
               className="flex-1 py-2.5 border border-brand-500 text-brand-500 rounded-xl text-sm font-medium text-center"
-            >🗺️ Google Maps</a>
+            >🗺️ Maps</a>
+            <a href={`waze://?q=${place.lat},${place.lng}&navigate=yes`}
+              className="flex-1 py-2.5 border border-[#05C3F7] text-[#05C3F7] rounded-xl text-sm font-medium flex items-center justify-center gap-1.5"
+            >
+              <img src="/uploads/icon-waze.png" alt="Waze" className="w-4 h-4 object-contain" />
+              Waze
+            </a>
             <button onClick={() => fileRef.current?.click()} disabled={uploading}
               className="flex-1 py-2.5 bg-brand-500 text-white rounded-xl text-sm font-medium disabled:opacity-50"
-            >{uploading ? 'מעלה...' : '📷 הוסף תמונה'}</button>
+            >{uploading ? 'מעלה...' : '📷 תמונה'}</button>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
           </div>
 
@@ -303,12 +319,113 @@ const MAP_OPTIONS: google.maps.MapOptions = {
   fullscreenControl: false,
 };
 
+// ─── שורה דראגבל ─────────────────────────────────────────────────────────────
+const SortableRow: React.FC<{ place: Place; index: number }> = ({ place, index }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: place.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="flex items-center gap-3 bg-white rounded-xl px-3 py-3 shadow-sm border border-neutral-100"
+    >
+      {/* drag handle */}
+      <div {...attributes} {...listeners} className="text-neutral-300 cursor-grab active:cursor-grabbing touch-none px-1 flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+          <circle cx="6" cy="5" r="1.5"/><circle cx="12" cy="5" r="1.5"/>
+          <circle cx="6" cy="9" r="1.5"/><circle cx="12" cy="9" r="1.5"/>
+          <circle cx="6" cy="13" r="1.5"/><circle cx="12" cy="13" r="1.5"/>
+        </svg>
+      </div>
+      <span className="w-6 h-6 rounded-full bg-brand-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+        {index + 1}
+      </span>
+      <span className="flex-1 text-sm font-medium text-neutral-800 truncate">{place.name}</span>
+      {place.notes && <span className="text-xs text-neutral-400 truncate max-w-[80px]">{place.notes}</span>}
+    </div>
+  );
+};
+
+// ─── שיט סידור מחדש ───────────────────────────────────────────────────────────
+interface ReorderSheetProps {
+  tripId: string;
+  places: Place[];
+  onClose: () => void;
+  onReordered: (places: Place[]) => void;
+}
+
+const ReorderSheet: React.FC<ReorderSheetProps> = ({ tripId, places: initial, onClose, onReordered }) => {
+  const [items, setItems] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems(prev => {
+      const oldIdx = prev.findIndex(p => p.id === active.id);
+      const newIdx = prev.findIndex(p => p.id === over.id);
+      return arrayMove(prev, oldIdx, newIdx);
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await apiClient.put(`/api/places/${tripId}/reorder`, { ids: items.map(p => p.id) });
+      onReordered(items);
+      onClose();
+    } catch { alert('שגיאה בשמירה'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[10000] flex items-end justify-center"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white w-full max-w-lg rounded-t-2xl shadow-2xl flex flex-col"
+        style={{ maxHeight: '80dvh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+          <h2 className="font-bold text-neutral-900">סידור מחדש</h2>
+          <button onClick={onClose} className="text-neutral-400 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 py-3">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map(p => p.id)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-2">
+                {items.map((place, idx) => (
+                  <SortableRow key={place.id} place={place} index={idx} />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </div>
+
+        <div className="flex-shrink-0 px-5 py-4 border-t border-neutral-100">
+          <button onClick={handleSave} disabled={saving}
+            className="w-full py-3 bg-brand-500 text-white rounded-xl font-semibold text-sm disabled:opacity-50"
+          >
+            {saving ? 'שומר...' : 'שמור סדר'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const MapPage: React.FC = () => {
   const { id: tripId } = useParams<{ id: string }>();
-  const [places,   setPlaces]   = useState<Place[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [showAdd,  setShowAdd]  = useState(false);
-  const [selected, setSelected] = useState<Place | null>(null);
+  const [places,      setPlaces]      = useState<Place[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [showAdd,     setShowAdd]     = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
+  const [selected,    setSelected]    = useState<Place | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { isLoaded } = useJsApiLoader({
@@ -328,11 +445,12 @@ export const MapPage: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  // מרכז המפה
-  const center = places.length
+  // מרכז המפה — ממומאז כדי שסגירת מודל לא תגרום לריכוז מחדש
+  const center = useMemo(() => places.length
     ? { lat: places.reduce((s, p) => s + p.lat, 0) / places.length,
         lng: places.reduce((s, p) => s + p.lng, 0) / places.length }
-    : { lat: 31.5, lng: 35.0 };
+    : { lat: 31.5, lng: 35.0 },
+  [places]);
 
   const handleAdded = (place: Place) => {
     setPlaces(prev => [...prev, place]);
@@ -363,10 +481,25 @@ export const MapPage: React.FC = () => {
         className="absolute top-4 left-4 z-[500] w-10 h-10 bg-brand-500 text-white rounded-full shadow-lg text-2xl flex items-center justify-center active:bg-brand-600 transition-colors"
       >+</button>
 
-      {/* מספר מקומות */}
+      {/* מספר מקומות + כפתור סידור מחדש */}
       {places.length > 0 && (
-        <div className="absolute top-4 right-4 z-[500] bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow text-xs font-semibold text-neutral-700">
-          📍 {places.length} מקומות
+        <div className="absolute top-4 right-4 z-[500] flex gap-2">
+          <div className="bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow text-xs font-semibold text-neutral-700">
+            📍 {places.length} מקומות
+          </div>
+          {places.length > 1 && (
+            <button
+              onClick={() => setShowReorder(true)}
+              className="bg-white/90 backdrop-blur-sm rounded-full w-8 h-8 shadow flex items-center justify-center text-neutral-600 active:bg-neutral-100"
+              title="סדר מחדש"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <line x1="2" y1="4" x2="14" y2="4"/>
+                <line x1="2" y1="8" x2="14" y2="8"/>
+                <line x1="2" y1="12" x2="14" y2="12"/>
+              </svg>
+            </button>
+          )}
         </div>
       )}
 
@@ -463,6 +596,14 @@ export const MapPage: React.FC = () => {
       {/* מודלים */}
       {showAdd && tripId && (
         <AddPlaceModal tripId={tripId} onClose={() => setShowAdd(false)} onAdded={handleAdded} />
+      )}
+      {showReorder && tripId && (
+        <ReorderSheet
+          tripId={tripId}
+          places={places}
+          onClose={() => setShowReorder(false)}
+          onReordered={setPlaces}
+        />
       )}
       {selected && (
         <PlaceDetailModal

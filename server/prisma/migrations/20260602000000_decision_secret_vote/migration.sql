@@ -1,0 +1,1 @@
+ALTER TABLE "Decision" ADD COLUMN "isSecretVote" BOOLEAN NOT NULL DEFAULT false;

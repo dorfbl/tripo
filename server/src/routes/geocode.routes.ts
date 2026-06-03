@@ -90,4 +90,20 @@ router.get('/details/:placeId', authenticateToken, async (req: Request, res: Res
   }
 });
 
+// GET /api/geocode/rate/:currency?to=TARGET  — שער המרה דרך Frankfurter
+router.get('/rate/:currency', authenticateToken, async (req: Request, res: Response) => {
+  const { currency } = req.params as { currency: string };
+  const to = ((req.query as Record<string, string>)['to'] ?? 'ILS').toUpperCase();
+  if (currency === to) { res.json({ rate: 1, date: new Date().toISOString().slice(0, 10) }); return; }
+  try {
+    const r = await fetch(`https://api.frankfurter.app/latest?from=${currency}&to=${to}`, { redirect: 'follow' });
+    const data: any = await r.json();
+    if (!data.rates?.[to]) { res.status(502).json({ error: 'שער לא נמצא' }); return; }
+    res.json({ rate: data.rates[to], date: data.date });
+  } catch (err) {
+    console.error('[rate]', err);
+    res.status(500).json({ error: 'שגיאה בקבלת שער' });
+  }
+});
+
 export default router;

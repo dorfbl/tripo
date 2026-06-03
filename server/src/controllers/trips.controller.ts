@@ -135,6 +135,30 @@ export const joinTrip = async (req: AuthRequest, res: Response): Promise<void> =
   }
 };
 
+export const updateTripCurrency = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = req.params['id'] as string;
+    const { defaultCurrency } = req.body as { defaultCurrency: string };
+
+    if (!defaultCurrency) { res.status(400).json({ error: 'חסר מטבע' }); return; }
+
+    const member = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId: id } },
+    });
+    if (!member)               { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+    if (member.role !== 'ADMIN') { res.status(403).json({ error: 'רק מנהל הטיול יכול לשנות מטבע ברירת מחדל' }); return; }
+
+    const trip = await prisma.trip.update({
+      where: { id },
+      data: { defaultCurrency },
+    });
+    res.json({ trip });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בעדכון מטבע' });
+  }
+};
+
 export const getTripMembers = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params['id'] as string;

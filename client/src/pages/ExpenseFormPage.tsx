@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
+import { Avatar } from '../components/ui/Avatar';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 
@@ -32,7 +33,7 @@ const CATEGORIES: { id: string; label: string; emoji: string }[] = [
 ];
 
 // ─── טיפוסים ───────────────────────────────────────────────────────────────────
-interface Member { id: string; name: string }
+interface Member { id: string; name: string; avatarUrl?: string | null }
 interface TripMemberFull { userId: string; role: string; user: Member }
 interface Participant { userId: string; user: Member }
 interface Expense {
@@ -49,8 +50,13 @@ interface Expense {
 }
 
 // ─── עזרים ────────────────────────────────────────────────────────────────────
-const fmtILS = (n: number) =>
-  new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n);
+const fmtBase = (n: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat('he-IL', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+  } catch {
+    return `${n.toFixed(2)} ${currency}`;
+  }
+};
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -74,7 +80,9 @@ export const ExpenseFormPage: React.FC = () => {
   const [expenseDate,  setExpenseDate]  = useState(todayStr());
   const [participants, setParticipants] = useState<string[]>([]);
   const [saving,       setSaving]       = useState(false);
-  const [error,        setError]        = useState('');
+  const [error,           setError]           = useState('');
+  const [fetchingRate,    setFetchingRate]     = useState(false);
+  const [rateIsLive,      setRateIsLive]       = useState(false);
 
   const curInfo   = CURRENCIES.find(c => c.code === currency)!;
   const amountILS = amount ? Math.round(parseFloat(amount) * exchangeRate * 100) / 100 : 0;
@@ -85,13 +93,14 @@ export const ExpenseFormPage: React.FC = () => {
     const init = async () => {
       try {
         // טוען חברים + הוצאה קיימת (אם עריכה)
+        const expensesData = await apiClient.get(`/api/expenses/${tripId}`);
+        const tripDefaultCurrency: string = expensesData.data.defaultCurrency ?? 'ILS';
+
         const [expRes, membRes] = await Promise.all([
           isEdit
-            ? apiClient.get(`/api/expenses/${tripId}`).then(r =>
-                (r.data.expenses as Expense[]).find((e: Expense) => e.id === expenseId) ?? null
-              )
+            ? Promise.resolve((expensesData.data.expenses as Expense[]).find((e: Expense) => e.id === expenseId) ?? null)
             : Promise.resolve(null),
-          apiClient.get(`/api/expenses/${tripId}`).then(r => r.data.members as TripMemberFull[]),
+          Promise.resolve(expensesData.data.members as TripMemberFull[]),
         ]);
 
         const membs: TripMemberFull[] = membRes;
@@ -110,6 +119,8 @@ export const ExpenseFormPage: React.FC = () => {
         } else {
           setPaidBy(user?.id ?? '');
           setParticipants(membs.map(m => m.userId));
+          setCurrency(tripDefaultCurrency);
+          setExchangeRate(1);
         }
       } catch { /* ignore */ }
       finally { setLoadingInit(false); }
@@ -117,9 +128,18 @@ export const ExpenseFormPage: React.FC = () => {
     init();
   }, [tripId, expenseId, isEdit, user?.id]);
 
-  const handleCurrencyChange = (code: string) => {
+  const handleCurrencyChange = async (code: string) => {
     setCurrency(code);
-    setExchangeRate(CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1);
+    setRateIsLive(false);
+    if (code === 'ILS') { setExchangeRate(1); return; }
+    const fallback = CURRENCIES.find(c => c.code === code)?.defaultRate ?? 1;
+    setExchangeRate(fallback);
+    setFetchingRate(true);
+    try {
+      const res = await apiClient.get(`/api/geocode/rate/${code}`);
+      if (res.data.rate) { setExchangeRate(res.data.rate); setRateIsLive(true); }
+    } catch { /* keep fallback */ }
+    finally { setFetchingRate(false); }
   };
 
   const toggleParticipant = (uid: string) => {
@@ -278,7 +298,12 @@ export const ExpenseFormPage: React.FC = () => {
               <label className="text-xs font-medium text-neutral-600">
                 שער המרה: 1 {curInfo.symbol} =
               </label>
-              <span className="text-xs text-neutral-400">ניתן לשינוי</span>
+              {fetchingRate
+                ? <span className="text-xs text-neutral-400">טוען שער...</span>
+                : rateIsLive
+                  ? <span className="text-xs text-green-500">✓ שער עדכני</span>
+                  : <span className="text-xs text-neutral-400">ניתן לשינוי</span>
+              }
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -293,7 +318,7 @@ export const ExpenseFormPage: React.FC = () => {
               <span className="text-sm text-neutral-600">₪</span>
               {amountILS > 0 && (
                 <span className="text-xs text-neutral-500 mr-auto">
-                  ≈ {fmtILS(amountILS)}
+                  ≈ {fmtBase(amountILS, 'ILS')}
                 </span>
               )}
             </div>
@@ -302,7 +327,7 @@ export const ExpenseFormPage: React.FC = () => {
 
         {/* משתתפים */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-3">
             <label className="text-sm font-medium text-neutral-700">מחולק בין</label>
             <button
               type="button"
@@ -314,25 +339,46 @@ export const ExpenseFormPage: React.FC = () => {
               {participants.length === members.length ? 'בטל הכל' : 'בחר הכל'}
             </button>
           </div>
-          <div className="flex flex-col gap-2">
-            {members.map(m => (
-              <label key={m.userId} className="flex items-center gap-3 cursor-pointer py-1">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 accent-brand-500"
-                  checked={participants.includes(m.userId)}
-                  onChange={() => toggleParticipant(m.userId)}
-                />
-                <span className="text-sm text-neutral-800 flex-1">
-                  {m.user.name}{m.userId === user?.id ? ' (אני)' : ''}
-                </span>
-                {participants.includes(m.userId) && participants.length > 0 && amountILS > 0 && (
-                  <span className="text-xs text-neutral-400">
-                    {fmtILS(amountILS / participants.length)}
+          <div className="flex flex-wrap gap-4">
+            {members.map(m => {
+              const active = participants.includes(m.userId);
+              const share = active && participants.length > 0 && amountILS > 0
+                ? fmtBase(amountILS / participants.length, 'ILS') : null;
+              return (
+                <button
+                  key={m.userId}
+                  type="button"
+                  onClick={() => toggleParticipant(m.userId)}
+                  className="flex flex-col items-center gap-1.5 min-w-[56px]"
+                >
+                  <div className={`relative rounded-full transition-all duration-150 ${
+                    active ? 'ring-2 ring-brand-500 ring-offset-2' : ''
+                  }`}>
+                    <Avatar
+                      name={m.user.name}
+                      avatarUrl={m.user.avatarUrl}
+                      size="lg"
+                      className={`transition-all duration-150 ${active ? '' : 'grayscale opacity-40'}`}
+                    />
+                    {active && (
+                      <span className="absolute -bottom-0.5 -left-0.5 w-4 h-4 bg-brand-500 rounded-full flex items-center justify-center shadow-sm">
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                          <path d="M1.5 4l2 2 3-3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-xs leading-none font-medium ${
+                    active ? 'text-neutral-800' : 'text-neutral-400'
+                  }`}>
+                    {m.user.name.split(' ')[0]}
                   </span>
-                )}
-              </label>
-            ))}
+                  {share && (
+                    <span className="text-[10px] text-brand-500 font-semibold leading-none">{share}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 

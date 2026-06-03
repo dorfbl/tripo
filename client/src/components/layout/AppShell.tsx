@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navbar } from './Navbar';
+import { Navbar, TripTopBar } from './Navbar';
 import { BottomNav } from './BottomNav';
 
 interface AppShellProps {
@@ -23,21 +23,23 @@ export const AppShell: React.FC<AppShellProps> = ({
   noPadding,
 }) => {
 
-  // ─── מפה — fullscreen, BottomNav fixed ───────────────────────────────────────
+  // ─── מפה — fullscreen עם TopBar ו-BottomNav ──────────────────────────────────
   if (noPadding && showBottomNav) {
     return (
-      <div className="min-h-dvh bg-white relative">
+      <div className="min-h-dvh bg-white relative pt-14">
+        <TripTopBar />
         {children}
         <BottomNav />
       </div>
     );
   }
 
-  // ─── דף עם BottomNav ─────────────────────────────────────────────────────────
+  // ─── דף עם TopBar + BottomNav ─────────────────────────────────────────────────
   if (showBottomNav) {
     return (
-      <div className="min-h-dvh bg-white flex flex-col">
-        <main className={`${widths[maxWidth]} mx-auto px-4 pt-5 pb-24 w-full flex-1`}>
+      <div className="min-h-dvh bg-neutral-50 flex flex-col">
+        <TripTopBar />
+        <main className={`${widths[maxWidth]} mx-auto px-4 pt-5 pb-32 w-full flex-1 mt-14`}>
           {children}
         </main>
         <BottomNav />

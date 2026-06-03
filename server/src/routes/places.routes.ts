@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { authenticateToken } from '../middleware/auth';
-import { getPlaces, addPlace, updatePlace, deletePlace, addPhoto, deletePhoto } from '../controllers/places.controller';
+import { getPlaces, addPlace, updatePlace, deletePlace, addPhoto, deletePhoto, reorderPlaces } from '../controllers/places.controller';
 
 const router = Router();
 
@@ -25,6 +25,7 @@ const upload = multer({
 
 router.get('/:tripId',                   authenticateToken, getPlaces);
 router.post('/:tripId',                  authenticateToken, addPlace);
+router.put('/:tripId/reorder',           authenticateToken, reorderPlaces);
 router.put('/:placeId',                  authenticateToken, updatePlace);
 router.delete('/:placeId',              authenticateToken, deletePlace);
 router.post('/:placeId/photos',          authenticateToken, upload.single('photo'), addPhoto);

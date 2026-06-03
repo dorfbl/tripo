@@ -12,7 +12,7 @@ export default defineConfig({
         skipWaiting: true,      // SW חדש לא ממתין — מפעיל מיד
         clientsClaim: true,     // לוקח שליטה על כל הtabs מיד
         // אל תשמור cache על HTML — תמיד טען מהרשת
-        navigateFallbackDenylist: [],
+        navigateFallbackDenylist: [/^\/uploads\//],
         runtimeCaching: [],
       },
       manifest: {
@@ -26,9 +26,9 @@ export default defineConfig({
         lang: 'he',
         dir: 'rtl',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-          { src: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+          { src: '/icons/icon-192-v2.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-512-v2.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/apple-touch-icon-v2.png', sizes: '180x180', type: 'image/png' },
         ],
       },
     }),

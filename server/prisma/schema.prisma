@@ -20,21 +20,27 @@ model User {
   votes              DestinationVote[]
   expensesPaid       TripExpense[]          @relation("ExpensesPaid")
   expenseParticipations ExpenseParticipant[]
+  decisionsCreated   Decision[]             @relation("DecisionsCreated")
+  decisionVotes      DecisionVote[]         @relation("DecisionVotesByUser")
+  linksCreated       TripLink[]             @relation("LinksCreated")
 }
 
 model Trip {
-  id          String     @id @default(uuid())
-  name        String
-  startDate   DateTime?
-  endDate     DateTime?
-  status      TripStatus @default(PLANNING)
-  inviteCode  String     @unique @default(uuid())
-  createdAt   DateTime   @default(now())
+  id              String     @id @default(uuid())
+  name            String
+  startDate       DateTime?
+  endDate         DateTime?
+  status          TripStatus @default(PLANNING)
+  inviteCode      String     @unique @default(uuid())
+  defaultCurrency String     @default("ILS")
+  createdAt       DateTime   @default(now())
 
   members      TripMember[]
   destinations SuggestedDestination[]
   expenses     TripExpense[]
   places       TripPlace[]
+  decisions    Decision[]
+  links        TripLink[]
 }
 
 enum TripStatus {
@@ -170,6 +176,59 @@ model PlacePhoto {
   place     TripPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
 }
 
+// ===== קישורים מרוכזים =====
+
+enum TripLinkType {
+  FLIGHT
+  HOTEL
+  CAR
+  ACTIVITY
+  RESTAURANT
+  BAR
+  MAP
+  INSURANCE
+  DOCUMENT
+  PAYMENT
+  OTHER
+}
+
+enum TripLinkStatus {
+  SAVED
+  PENDING
+  BOOKED
+  PAID
+  MISSING
+  CANCELLED
+}
+
+model TripLink {
+  id                String         @id @default(uuid())
+  tripId            String
+  title             String
+  description       String?
+  url               String?
+  type              TripLinkType   @default(OTHER)
+  status            TripLinkStatus @default(SAVED)
+  providerName      String?
+  startDate         DateTime?
+  endDate           DateTime?
+  estimatedCost     Float?
+  currency          String?
+  responsibleUserId String?
+  notes             String?
+  isPinned          Boolean        @default(false)
+  isPrivate         Boolean        @default(false)
+  fileUrl           String?
+  fileName          String?
+  decisionId        String?
+  createdByUserId   String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User @relation("LinksCreated", fields: [createdByUserId], references: [id])
+}
+
 model DestinationVote {
   id            String   @id @default(uuid())
   destinationId String
@@ -181,4 +240,79 @@ model DestinationVote {
   user          User     @relation(fields: [userId], references: [id])
 
   @@unique([destinationId, userId])
+}
+
+// ===== החלטות =====
+
+enum DecisionStatus {
+  VOTING
+  DECIDED
+}
+
+enum DecisionType {
+  YES_NO
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  TOP3
+}
+
+enum DecisionCategory {
+  DESTINATION
+  DATES
+  HOTEL
+  TRANSPORT
+  ACTIVITY
+  BUDGET
+  OTHER
+}
+
+model Decision {
+  id              String           @id @default(uuid())
+  tripId          String
+  title           String
+  description     String?
+  category        DecisionCategory @default(OTHER)
+  status          DecisionStatus   @default(VOTING)
+  type            DecisionType
+  finalDecision   String?
+  finalOptionId   String?
+  dueDate         DateTime?
+  actionNote      String?
+  isSecretVote    Boolean          @default(false)
+  createdByUserId String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  decidedAt       DateTime?
+
+  trip      Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User             @relation("DecisionsCreated", fields: [createdByUserId], references: [id])
+  options   DecisionOption[]
+  votes     DecisionVote[]
+}
+
+model DecisionOption {
+  id          String   @id @default(uuid())
+  decisionId  String
+  text        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  votes    DecisionVote[]
+}
+
+model DecisionVote {
+  id         String   @id @default(uuid())
+  decisionId String
+  optionId   String
+  userId     String
+  rank       Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  option   DecisionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user     User           @relation("DecisionVotesByUser", fields: [userId], references: [id])
+
+  @@unique([decisionId, optionId, userId])
 }

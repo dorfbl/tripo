@@ -154,6 +154,28 @@ export const addPhoto = async (req: AuthRequest, res: Response): Promise<void> =
   }
 };
 
+// ─── PUT /api/places/:tripId/reorder ────────────────────────────────────────
+export const reorderPlaces = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { tripId } = req.params as { tripId: string };
+    const { ids } = req.body as { ids: string[] }; // ordered array of place ids
+
+    const member = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId } },
+    });
+    if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+
+    await prisma.$transaction(
+      ids.map((id, idx) => prisma.tripPlace.update({ where: { id }, data: { order: idx } }))
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בסידור מחדש' });
+  }
+};
+
 // ─── DELETE /api/places/photos/:photoId ──────────────────────────────────────
 export const deletePhoto = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

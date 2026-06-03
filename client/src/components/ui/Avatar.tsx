@@ -7,21 +7,8 @@ interface AvatarProps {
   className?: string;
 }
 
-const COLORS = [
-  'bg-blue-100 text-blue-700',
-  'bg-green-100 text-green-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-purple-100 text-purple-700',
-  'bg-pink-100 text-pink-700',
-  'bg-indigo-100 text-indigo-700',
-];
-
 export const Avatar: React.FC<AvatarProps> = ({ name, avatarUrl, size = 'md', className = '' }) => {
-  const colorIndex = name.charCodeAt(0) % COLORS.length;
-  const color = COLORS[colorIndex];
-  const initial = name.charAt(0).toUpperCase();
-
-  const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-12 h-12 text-base' };
+  const sizes = { sm: 'w-7 h-7', md: 'w-9 h-9', lg: 'w-12 h-12' };
 
   if (avatarUrl) {
     return (
@@ -34,8 +21,11 @@ export const Avatar: React.FC<AvatarProps> = ({ name, avatarUrl, size = 'md', cl
   }
 
   return (
-    <div className={`${sizes[size]} ${color} rounded-full flex items-center justify-center font-semibold flex-shrink-0 ${className}`}>
-      {initial}
+    <div className={`${sizes[size]} rounded-full bg-neutral-200 flex items-end justify-center overflow-hidden flex-shrink-0 ${className}`}>
+      <svg viewBox="0 0 40 44" className="w-[75%] h-[75%] text-neutral-400" fill="currentColor">
+        <circle cx="20" cy="14" r="9" />
+        <path d="M2 44c0-9.941 8.059-18 18-18s18 8.059 18 18" />
+      </svg>
     </div>
   );
 };

@@ -49,23 +49,24 @@ interface Expense {
   createdAt: string;
 }
 interface Settlement {
-  from: Member;
-  to:   Member;
+  from: { userId: string; name: string };
+  to:   { userId: string; name: string };
   amountILS: number;
 }
 
 // ─── עזרים ────────────────────────────────────────────────────────────────────
 const fmtILS = (n: number) =>
-  new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
 
 const fmtAmt = (amount: number, currency: string) => {
   const cur = CURRENCIES.find(c => c.code === currency);
   const sym = cur?.symbol ?? currency;
-  if (currency === 'ILS') return `${amount.toLocaleString('he-IL', { maximumFractionDigits: 0 })} ₪`;
-  return `${sym}${amount.toLocaleString('he-IL', { maximumFractionDigits: 2 })}`;
+  return `${sym}${amount.toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 };
 
-const catInfo = (id: string) => CATEGORIES.find(c => c.id === id) ?? { emoji: '📌', label: 'אחר' };
+const catInfo = (id: string) =>
+  CATEGORIES.find(c => c.id === id) ??
+  (id === 'repayment' ? { emoji: '💳', label: 'סילוק חוב' } : { emoji: '📌', label: 'אחר' });
 
 // ─── קומפוננט ראשי ────────────────────────────────────────────────────────────
 export const ExpensesPage: React.FC = () => {
@@ -76,10 +77,12 @@ export const ExpensesPage: React.FC = () => {
   const [expenses,    setExpenses]    = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [members,     setMembers]     = useState<TripMemberFull[]>([]);
-  const [totalILS,    setTotalILS]    = useState(0);
   const [loading,     setLoading]     = useState(true);
-  const [activeTab,   setActiveTab]   = useState<'expenses' | 'settlements'>('expenses');
-  const [deleting,    setDeleting]    = useState<string | null>(null);
+  const [activeTab,        setActiveTab]        = useState<'expenses' | 'settlements'>('expenses');
+  const [deleting,         setDeleting]         = useState<string | null>(null);
+  const [repayTarget,      setRepayTarget]      = useState<Settlement | null>(null);
+  const [repayAmount,      setRepayAmount]      = useState('');
+  const [repaying,         setRepaying]         = useState(false);
 
   const load = useCallback(async () => {
     if (!tripId) return;
@@ -88,7 +91,6 @@ export const ExpensesPage: React.FC = () => {
       setExpenses(res.data.expenses);
       setSettlements(res.data.settlements);
       setMembers(res.data.members);
-      setTotalILS(res.data.totalILS);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, [tripId]);
@@ -105,6 +107,28 @@ export const ExpensesPage: React.FC = () => {
       window.removeEventListener('focus', load);
     };
   }, [load]);
+
+  const handleRepay = async () => {
+    if (!repayTarget || !tripId) return;
+    const amt = parseFloat(repayAmount);
+    if (!amt || amt <= 0) return;
+    setRepaying(true);
+    try {
+      await apiClient.post(`/api/expenses/${tripId}`, {
+        paidByUserId:   repayTarget.from.userId,
+        participantIds: [repayTarget.to.userId],
+        amount:         amt,
+        currency:       'ILS',
+        exchangeRate:   1,
+        description:    'החזר כסף',
+        category:       'repayment',
+        expenseDate:    new Date().toISOString(),
+      });
+      setRepayTarget(null);
+      load();
+    } catch { /* ignore */ }
+    finally { setRepaying(false); }
+  };
 
   const handleDelete = async (expenseId: string) => {
     if (!confirm('למחוק הוצאה זו?')) return;
@@ -126,9 +150,6 @@ export const ExpensesPage: React.FC = () => {
       {/* Header */}
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-neutral-900">💸 הוצאות</h1>
-        <p className="text-sm text-neutral-400 mt-0.5">
-          {expenses.length} הוצאות • סה״כ {fmtILS(totalILS)}
-        </p>
       </div>
 
       {/* Tabs */}
@@ -143,7 +164,7 @@ export const ExpensesPage: React.FC = () => {
                 : 'border-transparent text-neutral-500 hover:text-neutral-700'
             }`}
           >
-            {tab === 'expenses' ? `📋 הוצאות (${expenses.length})` : `⚖️ סילוקין (${settlements.length})`}
+            {tab === 'expenses' ? '📋 הוצאות' : '⚖️ סילוקין'}
           </button>
         ))}
       </div>
@@ -160,22 +181,31 @@ export const ExpensesPage: React.FC = () => {
           ) : (
             expenses.map(exp => {
               const cat = catInfo(exp.category);
-              const canDelete = exp.paidBy.id === user?.id ||
-                members.find(m => m.userId === user?.id)?.role === 'ADMIN';
+              const isRepayment = exp.category === 'repayment';
+              const canDelete = !isRepayment && (
+                exp.paidBy.id === user?.id ||
+                members.find(m => m.userId === user?.id)?.role === 'ADMIN'
+              );
               return (
-                <Card key={exp.id} className="p-4">
+                <Card key={exp.id} className={`p-4 ${isRepayment ? 'bg-green-50 border border-green-100' : ''}`}>
                   <div className="flex items-start gap-3">
-                    {/* אמוג'י קטגוריה */}
                     <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center text-xl flex-shrink-0">
                       {cat.emoji}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-semibold text-neutral-900 text-sm leading-snug">
-                          {exp.description}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-neutral-900 text-sm leading-snug">
+                            {exp.description}
+                          </span>
+                          {isRepayment && (
+                            <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-medium">
+                              סילוק חוב
+                            </span>
+                          )}
+                        </div>
                         <div className="text-left flex-shrink-0">
-                          <div className="font-bold text-neutral-900 text-sm">
+                          <div className={`font-bold text-sm ${isRepayment ? 'text-green-700' : 'text-neutral-900'}`}>
                             {fmtAmt(exp.amount, exp.currency)}
                           </div>
                           {exp.currency !== 'ILS' && (
@@ -186,29 +216,42 @@ export const ExpensesPage: React.FC = () => {
 
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-neutral-500">
-                          שילם: <span className="font-medium text-neutral-700">{exp.paidBy.name}</span>
+                          {isRepayment ? 'שילם: ' : 'שילם: '}
+                          <span className="font-medium text-neutral-700">{exp.paidBy.name}</span>
                         </span>
-                        <span className="text-xs text-neutral-300">•</span>
-                        <span className="text-xs text-neutral-500">
-                          מחולק ל-{exp.participants.length}
-                          {exp.participants.length > 0 && (
-                            <span className="text-neutral-400">
-                              {' '}({fmtILS(exp.amountILS / exp.participants.length)} לאחד)
+                        {isRepayment && exp.participants[0] && (
+                          <>
+                            <span className="text-xs text-neutral-300">←</span>
+                            <span className="text-xs text-neutral-500">
+                              <span className="font-medium text-neutral-700">{exp.participants[0].user.name}</span>
                             </span>
-                          )}
-                        </span>
+                          </>
+                        )}
+                        {!isRepayment && (
+                          <>
+                            <span className="text-xs text-neutral-300">•</span>
+                            <span className="text-xs text-neutral-500">
+                              מחולק ל-{exp.participants.length}
+                              {exp.participants.length > 0 && (
+                                <span className="text-neutral-400">
+                                  {' '}({fmtILS(exp.amountILS / exp.participants.length)} לאחד)
+                                </span>
+                              )}
+                            </span>
+                          </>
+                        )}
                       </div>
 
-                      {/* משתתפים */}
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {exp.participants.map(p => (
-                          <span key={p.userId} className="text-xs bg-neutral-100 text-neutral-600 rounded-full px-2 py-0.5">
-                            {p.user.name}
-                          </span>
-                        ))}
-                      </div>
+                      {!isRepayment && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {exp.participants.map(p => (
+                            <span key={p.userId} className="text-xs bg-neutral-100 text-neutral-600 rounded-full px-2 py-0.5">
+                              {p.user.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
-                      {/* תאריך + עריכה + מחיקה */}
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-neutral-400">
                           {new Date(exp.expenseDate).toLocaleDateString('he-IL')}
@@ -265,7 +308,7 @@ export const ExpensesPage: React.FC = () => {
                       rounded < -0.5 ? 'text-red-500' :
                       'text-neutral-400'
                     }`}>
-                      {rounded > 0.5  ? `+${fmtILS(rounded)}` :
+                      {rounded > 0.5  ? `+${fmtILS(rounded)}`  :
                        rounded < -0.5 ? `-${fmtILS(-rounded)}` :
                        'מאוזן ✓'}
                     </span>
@@ -287,7 +330,11 @@ export const ExpensesPage: React.FC = () => {
             </Card>
           ) : (
             settlements.map((s, i) => (
-              <Card key={i} className="p-4">
+              <Card
+                key={i}
+                className="p-4 cursor-pointer active:bg-neutral-50 transition-colors"
+                onClick={() => { setRepayTarget(s); setRepayAmount(String(s.amountILS)); }}
+              >
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -295,12 +342,13 @@ export const ExpensesPage: React.FC = () => {
                       <span className="text-neutral-400 text-sm">←</span>
                       <span className="font-semibold text-neutral-900">{s.to.name}</span>
                     </div>
-                    <p className="text-xs text-neutral-500 mt-0.5">
-                      {s.from.name} משלם ל{s.to.name}
-                    </p>
+                    <p className="text-xs text-neutral-500 mt-0.5">לחץ לסילוק חוב</p>
                   </div>
-                  <div className="text-left">
+                  <div className="text-left flex items-center gap-2">
                     <div className="font-bold text-lg text-brand-600">{fmtILS(s.amountILS)}</div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-neutral-300">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
                   </div>
                 </div>
               </Card>
@@ -312,6 +360,43 @@ export const ExpensesPage: React.FC = () => {
               * חישוב אופטימלי — מינימום מספר תשלומים לסילוק כל החובות
             </p>
           )}
+        </div>
+      )}
+
+      {/* מודל סילוק חוב */}
+      {repayTarget && (
+        <div
+          className="fixed inset-0 z-[10000] bg-black/50 flex items-end"
+          onClick={() => setRepayTarget(null)}
+        >
+          <div
+            className="bg-white w-full rounded-t-2xl p-6 pb-8"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-1">סילוק חוב</h3>
+            <p className="text-sm text-neutral-500 mb-4">
+              {repayTarget.from.name} משלם ל{repayTarget.to.name}
+            </p>
+            <div className="flex items-center border border-neutral-200 rounded-xl overflow-hidden mb-4 focus-within:border-brand-500">
+              <span className="px-4 text-neutral-500 text-sm bg-neutral-50 h-12 flex items-center border-l border-neutral-200">₪</span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={repayAmount}
+                onChange={e => setRepayAmount(e.target.value)}
+                className="flex-1 px-4 py-3 text-lg font-bold focus:outline-none"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={handleRepay}
+              disabled={repaying || !repayAmount || +repayAmount <= 0}
+              className="w-full py-3 bg-brand-500 text-white rounded-xl font-semibold disabled:opacity-50 transition-opacity"
+            >
+              {repaying ? 'שומר...' : 'סלק חוב ✓'}
+            </button>
+          </div>
         </div>
       )}
 
