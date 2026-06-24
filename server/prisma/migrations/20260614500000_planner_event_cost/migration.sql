@@ -1,0 +1,1 @@
+ALTER TABLE "PlannerEvent" ADD COLUMN IF NOT EXISTS "cost" TEXT;

@@ -42,7 +42,7 @@ export const createDecision = async (req: AuthRequest, res: Response) => {
   try {
     const { tripId } = req.params;
     const userId = req.userId!;
-    const { title, description, category, type, options, dueDate, isSecretVote } = req.body;
+    const { title, description, category, type, options, dueDate, isSecretVote, hideResultsUntilClosed } = req.body;
 
     const member = await getMember(tripId, userId);
     if (!member) return res.status(403).json({ error: 'אין גישה לטיול זה' });
@@ -69,6 +69,7 @@ export const createDecision = async (req: AuthRequest, res: Response) => {
         type: type as any,
         status: 'VOTING',
         isSecretVote: Boolean(isSecretVote),
+        hideResultsUntilClosed: Boolean(hideResultsUntilClosed),
         createdByUserId: userId,
         dueDate: dueDate ? new Date(dueDate) : null,
         options: optionTexts.length > 0 ? {

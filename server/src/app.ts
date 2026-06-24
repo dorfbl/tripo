@@ -3,14 +3,12 @@ import cors from 'cors';
 import { errorHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import tripsRoutes from './routes/trips.routes';
-import questionnaireRoutes from './routes/questionnaire.routes';
-import destinationsRoutes from './routes/destinations.routes';
-import adminRoutes from './routes/admin.routes';
 import expensesRoutes from './routes/expenses.routes';
 import placesRoutes from './routes/places.routes';
 import geocodeRoutes from './routes/geocode.routes';
 import decisionsRoutes from './routes/decisions.routes';
 import linksRoutes from './routes/links.routes';
+import plannerRoutes from './routes/planner.routes';
 
 const app = express();
 
@@ -41,14 +39,12 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripsRoutes);
-app.use('/api/questionnaire', questionnaireRoutes);
-app.use('/api/destinations', destinationsRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/expenses', expensesRoutes);
 app.use('/api/places', placesRoutes);
 app.use('/api/geocode', geocodeRoutes);
 app.use('/api/decisions', decisionsRoutes);
 app.use('/api/links', linksRoutes);
+app.use('/api/planner', plannerRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

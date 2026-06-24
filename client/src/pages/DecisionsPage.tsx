@@ -41,11 +41,12 @@ interface VoteBarProps {
   canVote: boolean;
   onVote: (optionId: string) => void;
   isSecretVote: boolean;
+  hideResults: boolean;
   voterNames: string[];
 }
 
 const VoteBar: React.FC<VoteBarProps> = ({
-  option, totalVotes, votesForOption, isMyVote, isFinalOption, canVote, onVote, isSecretVote, voterNames,
+  option, totalVotes, votesForOption, isMyVote, isFinalOption, canVote, onVote, isSecretVote, hideResults, voterNames,
 }) => {
   const pct = totalVotes > 0 ? Math.round((votesForOption / totalVotes) * 100) : 0;
 
@@ -61,7 +62,7 @@ const VoteBar: React.FC<VoteBarProps> = ({
           : 'border-neutral-200 bg-neutral-50'
       } ${canVote ? 'active:scale-[0.98] cursor-pointer' : 'cursor-default'}`}
     >
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {isMyVote && <span className="text-brand-500 text-xs font-bold">✓</span>}
           {isFinalOption && <span className="text-green-600 text-xs font-bold">★</span>}
@@ -69,18 +70,24 @@ const VoteBar: React.FC<VoteBarProps> = ({
             {option.text}
           </span>
         </div>
-        <span className="text-xs text-neutral-500">{votesForOption} {votesForOption === 1 ? 'קול' : 'קולות'}</span>
+        {!hideResults && (
+          <span className="text-xs text-neutral-500">{votesForOption} {votesForOption === 1 ? 'קול' : 'קולות'}</span>
+        )}
       </div>
-      <div className="w-full h-1.5 bg-neutral-200 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${
-            isFinalOption ? 'bg-green-500' : isMyVote ? 'bg-brand-500' : 'bg-neutral-400'
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {!isSecretVote && voterNames.length > 0 && (
-        <p className="text-xs text-neutral-400 mt-1.5 text-right">{voterNames.join(' · ')}</p>
+      {!hideResults && (
+        <>
+          <div className="w-full h-1.5 bg-neutral-200 rounded-full overflow-hidden mt-1.5">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                isFinalOption ? 'bg-green-500' : isMyVote ? 'bg-brand-500' : 'bg-neutral-400'
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          {!isSecretVote && voterNames.length > 0 && (
+            <p className="text-xs text-neutral-400 mt-1.5 text-right">{voterNames.join(' · ')}</p>
+          )}
+        </>
       )}
     </button>
   );
@@ -201,19 +208,28 @@ const Top3VoterUI: React.FC<Top3VoterUIProps> = ({ decision, myUserId, canVote, 
           )}
 
           {isDirty && (
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl active:bg-brand-600 disabled:opacity-50 text-sm"
-            >
-              {submitting ? 'שומר...' : 'שמור דירוג'}
-            </button>
+            <>
+              {draft.some(d => d === null) && (
+                <p className="text-xs text-amber-600 font-medium mb-1.5 text-center">יש לבחור 3 אפשרויות כדי לשמור</p>
+              )}
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || draft.some(d => d === null)}
+                className="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl active:bg-brand-600 disabled:opacity-50 text-sm"
+              >
+                {submitting ? 'שומר...' : 'שמור דירוג'}
+              </button>
+            </>
           )}
         </div>
       )}
 
       {/* Group results */}
-      {voterCount > 0 ? (
+      {decision.hideResultsUntilClosed && decision.status !== 'DECIDED' ? (
+        voterCount > 0 && (
+          <p className="text-xs text-neutral-400 text-center py-1">🔒 {voterCount} {voterCount === 1 ? 'אדם דירג' : 'אנשים דירגו'} · התוצאות יוצגו בסגירת ההצבעה</p>
+        )
+      ) : voterCount > 0 ? (
         <div>
           <p className="text-xs font-bold text-neutral-500 mb-2">
             תוצאות הקבוצה · {voterCount} דירגו
@@ -253,7 +269,7 @@ const Top3VoterUI: React.FC<Top3VoterUIProps> = ({ decision, myUserId, canVote, 
           <p className="text-xs text-neutral-400 mt-2 text-center">🥇=3נק׳ · 🥈=2נק׳ · 🥉=1נק׳</p>
         </div>
       ) : (
-        canVote && <p className="text-xs text-neutral-400 text-center py-1">אין עדיין דירוגים — היה הראשון!</p>
+        canVote && !decision.hideResultsUntilClosed && <p className="text-xs text-neutral-400 text-center py-1">אין עדיין דירוגים — היה הראשון!</p>
       )}
     </div>
   );
@@ -306,9 +322,12 @@ const DecisionCard: React.FC<DecisionCardProps> = ({
           <h3 className="font-bold text-neutral-900 text-base leading-snug flex-1">{decision.title}</h3>
           <div className="flex flex-col items-end gap-1 flex-shrink-0">
             <div className="flex items-center gap-1">
-              <span title={decision.isSecretVote ? 'הצבעה חשאית' : 'הצבעה גלויה'} className="text-sm">
-                {decision.isSecretVote ? '🔒' : '👁️'}
-              </span>
+              {decision.isSecretVote && (
+                <span title="הצבעה חשאית — לא רואים מי הצביע על מה" className="text-sm">👤</span>
+              )}
+              {decision.hideResultsUntilClosed && decision.status !== 'DECIDED' && (
+                <span title="תוצאות מוסתרות עד סגירה" className="text-sm">🔒</span>
+              )}
               {isTop3 && <span className="text-xs font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">טופ 3</span>}
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[decision.status]}`}>
                 {STATUS_LABELS[decision.status]}
@@ -388,6 +407,7 @@ const DecisionCard: React.FC<DecisionCardProps> = ({
                 canVote={canVote}
                 onVote={optId => onVote(decision.id, optId)}
                 isSecretVote={decision.isSecretVote}
+                hideResults={decision.hideResultsUntilClosed && decision.status !== 'DECIDED'}
                 voterNames={voterNames}
               />
             );

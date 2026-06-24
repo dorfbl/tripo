@@ -1,0 +1,1 @@
+ALTER TABLE "Decision" ADD COLUMN IF NOT EXISTS "hideResultsUntilClosed" BOOLEAN NOT NULL DEFAULT false;

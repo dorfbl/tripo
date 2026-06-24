@@ -5,9 +5,9 @@ import { useAuthStore } from '../store/authStore';
 import { useActiveTripStore } from '../store/activeTripStore';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import apiClient from '../api/client';
+import type { TripStatus } from '../types';
 
 const CURRENCIES = [
   { code: 'ILS', label: '₪ שקל' },
@@ -17,52 +17,99 @@ const CURRENCIES = [
   { code: 'CHF', label: '₣ פרנק שוויצרי' },
   { code: 'JPY', label: '¥ ין יפני' },
   { code: 'THB', label: '฿ בהט תאילנדי' },
-  { code: 'CZK', label: 'Kč קורונה צ\'כית' },
+  { code: 'CZK', label: "Kč קורונה צ'כית" },
   { code: 'HUF', label: 'Ft פורינט הונגרי' },
   { code: 'PLN', label: 'zł זלוטי פולני' },
   { code: 'AUD', label: 'A$ דולר אוסטרלי' },
   { code: 'CAD', label: 'C$ דולר קנדי' },
 ];
 
-const STATUS_LABEL: Record<string, string> = {
-  PLANNING: 'תכנון',
-  VOTING: 'הצבעות',
-  BOOKED: 'נקבע',
-  ONGOING: 'בדרך!',
-  COMPLETED: 'הושלם',
-};
+const STATUS_OPTIONS: { value: TripStatus; label: string; color: string }[] = [
+  { value: 'PLAN',     label: 'תכנון',   color: 'bg-blue-100 text-blue-600' },
+  { value: 'LIVE',     label: 'בדרך!',   color: 'bg-green-100 text-green-700' },
+  { value: 'FINISHED', label: 'הסתיים',  color: 'bg-neutral-100 text-neutral-500' },
+  { value: 'CANCELED', label: 'בוטל',    color: 'bg-red-100 text-red-500' },
+];
+
+const statusInfo = (s: TripStatus) => STATUS_OPTIONS.find(o => o.value === s) ?? STATUS_OPTIONS[0];
+
+function toInputDate(iso: string | null | undefined) {
+  if (!iso) return '';
+  return iso.slice(0, 10);
+}
 
 export const TripPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { currentTrip, loadTrip, isLoading, generateDestinations } = useTripStore();
+  const navigate = useNavigate();
+  const { currentTrip, loadTrip, isLoading } = useTripStore();
   const { user } = useAuthStore();
   const { setActiveTrip } = useActiveTripStore();
-  const navigate = useNavigate();
+
   const [copied, setCopied] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState('');
   const [savingCurrency, setSavingCurrency] = useState(false);
-  const [questStatus, setQuestStatus] = useState<{
-    total: number; completed: number;
-    members: { userId: string; name: string; completed: boolean }[];
-  } | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [changingRoleUserId, setChangingRoleUserId] = useState<string | null>(null);
+
+  // Edit sheet
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+  const [editStatus, setEditStatus] = useState<TripStatus>('PLAN');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (id) { loadTrip(id); loadStatus(id); }
+    if (id) loadTrip(id);
   }, [id]);
 
-  // עדכן את הטיול הפעיל כשהטיול נטען
   useEffect(() => {
-    if (id && currentTrip) {
-      setActiveTrip(id, currentTrip.name);
-    }
+    if (id && currentTrip) setActiveTrip(id, currentTrip.name);
   }, [id, currentTrip?.name]);
 
-  const loadStatus = async (tripId: string) => {
+  const openEdit = () => {
+    if (!currentTrip) return;
+    setEditName(currentTrip.name);
+    setEditStart(toInputDate(currentTrip.startDate));
+    setEditEnd(toInputDate(currentTrip.endDate));
+    setEditStatus(currentTrip.status);
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!id || !editName.trim()) return;
+    setSaving(true);
     try {
-      const res = await apiClient.get(`/api/questionnaire/${tripId}/status`);
-      setQuestStatus(res.data);
-    } catch { /* ignore */ }
+      await apiClient.put(`/api/trips/${id}`, {
+        name: editName.trim(),
+        startDate: editStart || null,
+        endDate:   editEnd   || null,
+        status:    editStatus,
+      });
+      await loadTrip(id);
+      setEditOpen(false);
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  };
+
+  const handleChangeRole = async (userId: string, currentRole: 'ADMIN' | 'MEMBER') => {
+    if (!id) return;
+    const newRole = currentRole === 'ADMIN' ? 'MEMBER' : 'ADMIN';
+    setChangingRoleUserId(userId);
+    try {
+      await apiClient.patch(`/api/trips/${id}/members/${userId}/role`, { role: newRole });
+      await loadTrip(id);
+    } catch { /* silent */ }
+    finally { setChangingRoleUserId(null); }
+  };
+
+  const handleRemoveMember = async (userId: string, name: string) => {
+    if (!id || !confirm(`להסיר את ${name} מהטיול?`)) return;
+    setRemovingUserId(userId);
+    try {
+      await apiClient.delete(`/api/trips/${id}/members/${userId}`);
+      await loadTrip(id);
+    } catch { /* silent */ }
+    finally { setRemovingUserId(null); }
   };
 
   const handleCurrencyChange = async (code: string) => {
@@ -82,21 +129,6 @@ export const TripPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleGenerate = async () => {
-    if (!id) return;
-    setGenError('');
-    setGenerating(true);
-    try {
-      await generateDestinations(id);
-      navigate(`/trip/${id}/destinations`);
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setGenError(e.response?.data?.error || 'שגיאה בייצור המלצות');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   if (isLoading || !currentTrip) {
     return (
       <AppShell showBottomNav>
@@ -105,18 +137,27 @@ export const TripPage: React.FC = () => {
     );
   }
 
-  const myMember   = currentTrip.members.find((m) => m.userId === user?.id);
-  const isAdmin    = myMember?.role === 'ADMIN';
-  const myCompleted = myMember?.completedQuestionnaire ?? false;
+  const myMember = currentTrip.members.find((m) => m.userId === user?.id);
+  const isAdmin  = myMember?.role === 'ADMIN';
+  const st       = statusInfo(currentTrip.status);
 
   return (
     <AppShell showBottomNav>
 
-      {/* ─── כותרת הטיול ─── */}
+      {/* Trip header */}
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-neutral-900 leading-tight">{currentTrip.name}</h1>
+        <div className="flex items-start justify-between gap-2">
+          <h1 className="text-2xl font-bold text-neutral-900 leading-tight flex-1">{currentTrip.name}</h1>
+          {isAdmin && (
+            <button
+              onClick={openEdit}
+              className="flex-shrink-0 text-xs text-brand-500 font-medium px-2.5 py-1.5 rounded-lg bg-brand-50 active:bg-brand-100 mt-0.5"
+            >
+              ✏️ ערוך
+            </button>
+          )}
+        </div>
 
-        {/* תאריכים */}
         {currentTrip.startDate ? (
           <p className="text-sm text-neutral-500 mt-1">
             📅 {new Date(currentTrip.startDate).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -128,27 +169,19 @@ export const TripPage: React.FC = () => {
           <p className="text-sm text-neutral-400 mt-1">📅 תאריכים טרם נקבעו</p>
         )}
 
-        {/* סטטוס */}
         <div className="mt-2">
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            currentTrip.status === 'PLANNING'  ? 'bg-blue-100 text-blue-600' :
-            currentTrip.status === 'VOTING'    ? 'bg-yellow-100 text-yellow-700' :
-            currentTrip.status === 'ONGOING'   ? 'bg-green-100 text-green-700' :
-            'bg-neutral-100 text-neutral-500'
-          }`}>
-            {STATUS_LABEL[currentTrip.status] ?? currentTrip.status}
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${st.color}`}>
+            {st.label}
           </span>
         </div>
       </div>
 
-      {/* ─── חברי הקבוצה ─── */}
+      {/* Members */}
       <Card className="p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-neutral-800">
             חברי הקבוצה
-            <span className="text-sm font-normal text-neutral-400 mr-1.5">
-              ({currentTrip.members.length})
-            </span>
+            <span className="text-sm font-normal text-neutral-400 mr-1.5">({currentTrip.members.length})</span>
           </h2>
           <button
             onClick={copyInvite}
@@ -159,92 +192,66 @@ export const TripPage: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-2.5">
-          {currentTrip.members.map((member) => {
-            const statusMember = questStatus?.members.find((m) => m.userId === member.userId);
-            return (
-              <div key={member.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Avatar name={member.user.name} avatarUrl={member.user.avatarUrl} size="sm" />
-                  <span className="text-sm font-medium text-neutral-800">
-                    {member.user.name}
-                    {member.role === 'ADMIN' && <span className="mr-1 text-xs">👑</span>}
-                  </span>
-                </div>
-                {currentTrip.status === 'PLANNING' && (
-                  statusMember?.completed
-                    ? <span className="text-xs text-green-600 font-medium">✅ מילא שאלון</span>
-                    : <span className="text-xs text-neutral-400">ממתין...</span>
-                )}
+          {currentTrip.members.map((member) => (
+            <div key={member.id} className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Avatar name={member.user.name} avatarUrl={member.user.avatarUrl} size="sm" />
+                <span className="text-sm font-medium text-neutral-800">
+                  {member.user.name}
+                  {member.role === 'ADMIN' && <span className="mr-1 text-xs">👑</span>}
+                </span>
               </div>
-            );
-          })}
+              {isAdmin && member.userId !== currentTrip.ownerId && member.userId !== user?.id && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleChangeRole(member.userId, member.role)}
+                    disabled={changingRoleUserId === member.userId}
+                    className="text-xs text-brand-500 px-2 py-1 rounded-lg active:bg-brand-50 disabled:opacity-40"
+                  >
+                    {changingRoleUserId === member.userId ? '...' : member.role === 'ADMIN' ? 'הסר מנהל' : 'הפוך למנהל'}
+                  </button>
+                  <button
+                    onClick={() => handleRemoveMember(member.userId, member.user.name)}
+                    disabled={removingUserId === member.userId}
+                    className="text-xs text-red-400 px-2 py-1 rounded-lg active:bg-red-50 disabled:opacity-40"
+                  >
+                    {removingUserId === member.userId ? '...' : 'הסר'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </Card>
 
-      {/* ─── פעולות לפי שלב ─── */}
+      {/* Planner link — desktop only */}
+      <div className="hidden md:block mb-2">
+        <button
+          onClick={() => navigate(`/trip/${id}/planner`)}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-brand-300 hover:bg-brand-50 transition-colors text-right"
+        >
+          <span className="text-sm font-medium text-neutral-700">📅 מתכנן הטיול</span>
+          <span className="text-xs text-brand-500 font-medium">פתח ←</span>
+        </button>
+      </div>
 
-      {currentTrip.status === 'PLANNING' && (
-        <div className="flex flex-col gap-3">
-          {!myCompleted && (
-            <Button size="lg" className="w-full" onClick={() => navigate(`/trip/${id}/questionnaire`)}>
-              📋 מלא את השאלון
-            </Button>
-          )}
+      {/* Questionnaire link — all screens */}
+      <div className="mb-4">
+        <button
+          onClick={() => navigate(`/trip/${id}/questionnaire`)}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-brand-300 hover:bg-brand-50 transition-colors text-right"
+        >
+          <span className="text-sm font-medium text-neutral-700">🗳️ שאלון הטיול</span>
+          <span className="text-xs text-brand-500 font-medium">הצביעו ←</span>
+        </button>
+      </div>
 
-          {myCompleted && !isAdmin && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-sm text-green-700 text-center">
-              ✅ מילאת את השאלון!
-              {questStatus && questStatus.completed < questStatus.total
-                ? ` ממתין ל-${questStatus.total - questStatus.completed} חברים נוספים...`
-                : ' המנהל יייצר את ההמלצות בקרוב.'}
-            </div>
-          )}
-
-          {isAdmin && questStatus && questStatus.completed > 0 && (
-            <div>
-              <Button size="lg" className="w-full" loading={generating} onClick={handleGenerate}>
-                🤖 ייצר המלצות AI
-                {questStatus.completed < questStatus.total && (
-                  <span className="text-xs mr-2 opacity-70">
-                    ({questStatus.completed}/{questStatus.total} מילאו)
-                  </span>
-                )}
-              </Button>
-              {genError && <p className="text-xs text-red-500 mt-1 text-center">{genError}</p>}
-            </div>
-          )}
-
-          {isAdmin && questStatus && questStatus.completed === 0 && (
-            <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-sm text-neutral-500 text-center">
-              ממתין שחברים ימלאו את השאלון לפני ייצור המלצות
-            </div>
-          )}
-        </div>
-      )}
-
-      {currentTrip.status === 'VOTING' && (
-        <div className="flex flex-col gap-3">
-          <Button size="lg" className="w-full" onClick={() => navigate(`/trip/${id}/destinations`)}>
-            🗳️ לצפות ביעדים ולהצביע
-          </Button>
-          {isAdmin && (
-            <div>
-              <Button variant="ghost" size="sm" className="w-full text-neutral-400" loading={generating} onClick={handleGenerate}>
-                🔄 ייצר המלצות מחדש
-              </Button>
-              {genError && <p className="text-xs text-red-500 mt-1 text-center">{genError}</p>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─── אדמין: כלי מנהל ─── */}
+      {/* Admin tools */}
       {isAdmin && (
-        <div className="mt-6 pt-5 border-t border-neutral-100">
+        <div className="mt-2 pt-5 border-t border-neutral-100">
           <p className="text-xs text-neutral-400 mb-3 font-medium">כלי מנהל</p>
 
-          {/* מטבע ברירת מחדל */}
-          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 mb-2">
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200">
             <span className="text-sm text-neutral-600">💱 מטבע ברירת מחדל</span>
             <select
               value={currentTrip.defaultCurrency}
@@ -257,14 +264,80 @@ export const TripPage: React.FC = () => {
               ))}
             </select>
           </div>
+        </div>
+      )}
 
-          <button
-            onClick={() => navigate('/admin/questions')}
-            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors text-sm text-neutral-600"
-          >
-            <span>⚙️ עריכת שאלות השאלון</span>
-            <span className="text-neutral-300">‹</span>
-          </button>
+      {/* Edit trip sheet */}
+      {editOpen && (
+        <div className="fixed inset-0 z-[10000] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditOpen(false)} />
+          <div className="relative bg-white rounded-t-3xl shadow-2xl p-6 pb-10">
+            <div className="w-10 h-1 bg-neutral-200 rounded-full mx-auto mb-5" />
+            <h2 className="text-lg font-bold text-neutral-900 mb-5">עריכת פרטי הטיול</h2>
+
+            <div className="flex flex-col gap-4">
+              {/* Name */}
+              <div>
+                <label className="text-xs font-bold text-neutral-600 mb-1.5 block">שם הטיול</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              {/* Dates */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-neutral-600 mb-1.5 block">תאריך יציאה</label>
+                  <input
+                    type="date"
+                    value={editStart}
+                    onChange={e => setEditStart(e.target.value)}
+                    className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-neutral-600 mb-1.5 block">תאריך חזרה</label>
+                  <input
+                    type="date"
+                    value={editEnd}
+                    onChange={e => setEditEnd(e.target.value)}
+                    className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="text-xs font-bold text-neutral-600 mb-2 block">סטטוס</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {STATUS_OPTIONS.map(s => (
+                    <button
+                      key={s.value}
+                      onClick={() => setEditStatus(s.value)}
+                      className={`py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                        editStatus === s.value
+                          ? 'border-brand-500 bg-brand-50 text-brand-700'
+                          : 'border-neutral-200 text-neutral-600'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving || !editName.trim()}
+              className="w-full mt-6 bg-brand-500 text-white font-bold py-3.5 rounded-2xl active:bg-brand-600 disabled:opacity-50"
+            >
+              {saving ? 'שומר...' : 'שמור שינויים'}
+            </button>
+          </div>
         </div>
       )}
 

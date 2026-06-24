@@ -5,7 +5,10 @@ import {
   getTrip,
   joinTrip,
   getTripMembers,
+  updateTrip,
   updateTripCurrency,
+  removeMember,
+  changeMemberRole,
 } from '../controllers/trips.controller';
 import { authenticateToken } from '../middleware/auth';
 
@@ -18,6 +21,9 @@ router.get('/', getTrips);
 router.get('/:id', getTrip);
 router.post('/join/:inviteCode', joinTrip);
 router.get('/:id/members', getTripMembers);
+router.put('/:id', updateTrip);
 router.patch('/:id/currency', updateTripCurrency);
+router.delete('/:id/members/:userId', removeMember);
+router.patch('/:id/members/:userId/role', changeMemberRole);
 
 export default router;

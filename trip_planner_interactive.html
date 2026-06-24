@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מתכנן טיול – יער שחור + מינכן 2026</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --forest: #2d6a2d;
+  --forest-light: #e8f5e9;
+  --forest-mid: #a5d6a7;
+  --munich: #1a3a7a;
+  --munich-light: #e3eaff;
+  --travel: #7a5a00;
+  --travel-light: #fff8e1;
+  --special: #8b0000;
+  --special-light: #fce4ec;
+  --bg: #f0f2f5;
+  --surface: #fff;
+  --border: #e0e0e0;
+  --text: #1a1a2e;
+  --text-muted: #777;
+  --radius: 10px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.09);
+}
+
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ─── HEADER ─── */
+.header {
+  background: linear-gradient(135deg, #1a3a1a 0%, #2d6a2d 60%, #1a3a5a 100%);
+  color: #fff;
+  padding: 18px 24px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+}
+.header h1 { font-size: 18px; font-weight: 700; }
+.header-sub { font-size: 12px; opacity: .75; margin-top: 2px; }
+.header-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.hpill {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 20px; padding: 3px 10px; font-size: 11px;
+}
+.total-budget {
+  background: rgba(255,220,0,0.2);
+  border: 1px solid rgba(255,220,0,0.4);
+  border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ─── LAYOUT ─── */
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 0;
+  height: calc(100vh - 70px);
+  overflow: hidden;
+}
+
+/* ─── SIDEBAR (WAREHOUSE) ─── */
+.sidebar {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: #fafafa;
+}
+.sidebar-header h2 { font-size: 14px; font-weight: 700; color: var(--text); }
+.sidebar-header p { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.filter-tabs {
+  display: flex; gap: 4px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #fafafa;
+  overflow-x: auto;
+}
+.ftab {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px;
+  border: 1.5px solid var(--border); background: #fff; cursor: pointer;
+  white-space: nowrap; transition: all .15s;
+}
+.ftab.active { border-color: var(--forest); background: var(--forest-light); color: var(--forest); }
+.ftab:hover:not(.active) { background: #f0f0f0; }
+
+.activities-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* ─── ACTIVITY CARD (in warehouse) ─── */
+.act-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  cursor: grab;
+  user-select: none;
+  transition: transform .1s, box-shadow .1s, opacity .1s;
+  position: relative;
+}
+.act-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.act-card.dragging { opacity: 0.45; transform: scale(0.97); }
+.act-card.placed { opacity: 0.35; pointer-events: none; }
+
+.act-card-top { display: flex; align-items: flex-start; gap: 8px; }
+.act-emoji { font-size: 20px; flex-shrink: 0; line-height: 1; }
+.act-info { flex: 1; min-width: 0; }
+.act-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.act-loc { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.act-meta { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+.act-tag {
+  font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  white-space: nowrap;
+}
+.tag-forest { background: var(--forest-light); color: var(--forest); }
+.tag-munich { background: var(--munich-light); color: var(--munich); }
+.tag-travel { background: var(--travel-light); color: var(--travel); }
+.tag-special { background: var(--special-light); color: var(--special); }
+.tag-food { background: #fff3e0; color: #e65100; }
+.tag-drive { background: #f3e5f5; color: #7b1fa2; }
+
+.act-dur {
+  font-size: 10px; color: #555; background: #f5f5f5;
+  border-radius: 4px; padding: 2px 6px;
+}
+.act-price { font-size: 10px; color: #1a6a1a; font-weight: 700; }
+.act-drag-hint {
+  position: absolute; top: 8px; left: 10px;
+  font-size: 14px; color: #ccc;
+}
+
+/* ─── CALENDAR ─── */
+.calendar-area {
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 16px;
+}
+
+.cal-legend {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.day-col {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.day-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.day-head.fo { background: var(--forest-light); border-bottom-color: var(--forest-mid); }
+.day-head.mu { background: var(--munich-light); }
+.day-head.tr { background: #fafafa; }
+.day-head.sp { background: var(--special-light); }
+
+.day-label {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  white-space: nowrap;
+}
+.day-label.fo { background: #c8e6c9; color: #1b5e20; }
+.day-label.mu { background: #bbdefb; color: #0d47a1; }
+.day-label.tr { background: #eeeeee; color: #424242; }
+.day-label.sp { background: #ffccbc; color: #bf360c; }
+
+.day-title-wrap { flex: 1; }
+.day-title { font-size: 14px; font-weight: 700; }
+.day-date { font-size: 11px; color: var(--text-muted); }
+.day-total-time {
+  font-size: 11px; background: rgba(0,0,0,0.06); border-radius: 20px;
+  padding: 3px 10px; color: #333; white-space: nowrap;
+}
+
+/* ─── TIME SLOTS ─── */
+.time-grid {
+  display: flex;
+  flex-direction: column;
+}
+.time-row {
+  display: flex;
+  border-bottom: 1px solid #f0f0f0;
+  min-height: 48px;
+}
+.time-row:last-child { border-bottom: none; }
+.time-label {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 6px 6px 0;
+  border-left: 1px solid #f0f0f0;
+  background: #fafafa;
+  font-weight: 600;
+}
+.time-slot {
+  flex: 1;
+  min-height: 48px;
+  padding: 4px 6px;
+  transition: background .12s;
+  position: relative;
+}
+.time-slot.drag-over {
+  background: #e8f5e9;
+  outline: 2px dashed var(--forest);
+  outline-offset: -2px;
+}
+
+/* ─── PLACED ACTIVITY ─── */
+.placed-act {
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1.5px solid transparent;
+  position: relative;
+  cursor: grab;
+}
+.placed-act:hover { filter: brightness(0.97); }
+
+.pa-forest { background: var(--forest-light); border-color: var(--forest-mid); }
+.pa-munich { background: var(--munich-light); border-color: #90caf9; }
+.pa-travel { background: var(--travel-light); border-color: #ffe082; }
+.pa-special { background: var(--special-light); border-color: #ef9a9a; }
+.pa-food { background: #fff8f0; border-color: #ffcc80; }
+.pa-drive { background: #f8f0ff; border-color: #ce93d8; }
+
+.pa-emoji { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.pa-body { flex: 1; min-width: 0; }
+.pa-name { font-size: 12px; font-weight: 700; }
+.pa-meta { font-size: 11px; color: #555; margin-top: 2px; }
+.pa-dur-badge {
+  font-size: 10px; background: rgba(0,0,0,0.08);
+  border-radius: 4px; padding: 1px 5px; white-space: nowrap; flex-shrink: 0;
+}
+.pa-remove {
+  position: absolute; top: 4px; left: 6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(0,0,0,0.12); border: none; cursor: pointer;
+  font-size: 10px; line-height: 18px; text-align: center;
+  color: #555; display: none;
+}
+.placed-act:hover .pa-remove { display: flex; align-items: center; justify-content: center; }
+
+/* drive item special */
+.drive-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; font-size: 12px; color: #7b1fa2;
+  background: #f8f0ff; border-radius: 6px; margin-bottom: 4px;
+}
+
+/* ─── DROP ZONE HINT ─── */
+.drop-hint {
+  font-size: 11px; color: #aaa; text-align: center;
+  padding: 12px; border: 1.5px dashed #ddd; border-radius: 8px;
+  margin: 4px;
+}
+
+/* ─── FIXED ITEMS (can't remove) ─── */
+.fixed-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; margin-bottom: 4px; border-radius: 8px;
+  background: #f5f5f5; border: 1px solid #e0e0e0;
+  font-size: 12px;
+}
+.fixed-badge {
+  font-size: 9px; background: #ddd; color: #666;
+  border-radius: 4px; padding: 1px 5px; flex-shrink: 0;
+}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+/* ─── MOBILE ─── */
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; height: auto; }
+  .sidebar { height: 360px; border-left: none; border-bottom: 1px solid var(--border); }
+  .calendar-area { height: auto; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🌲 מתכנן טיול – יער שחור + מינכן</h1>
+    <div class="header-sub">גרור פעילויות מהמחסן לימים | לחץ ✕ להסרה</div>
+  </div>
+  <div class="header-pills">
+    <span class="hpill">📅 7–14.10.2026</span>
+    <span class="hpill">👥 5 איש</span>
+  </div>
+  <div class="total-budget" id="budgetDisplay">⏱ זמן מתוכנן: 0 שעות</div>
+</div>
+
+<div class="layout">
+
+  <!-- ══════════════════════════════════════
+       SIDEBAR – מחסן הפעילויות
+  ══════════════════════════════════════ -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>📦 מחסן פעילויות</h2>
+      <p>גרור כל פעילות לתוך היום הרצוי</p>
+    </div>
+    <div class="filter-tabs">
+      <button class="ftab active" onclick="filterActs('all', this)">הכל</button>
+      <button class="ftab" onclick="filterActs('forest', this)">🌲 יער</button>
+      <button class="ftab" onclick="filterActs('munich', this)">🏙️ מינכן</button>
+      <button class="ftab" onclick="filterActs('travel', this)">🚐 נסיעה</button>
+      <button class="ftab" onclick="filterActs('food', this)">🍽️ אוכל</button>
+      <button class="ftab" onclick="filterActs('drive', this)">🗺️ מסלול</button>
+    </div>
+    <div class="activities-list" id="actsList"></div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CALENDAR
+  ══════════════════════════════════════ -->
+  <div class="calendar-area">
+
+    <div class="cal-legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#2d6a2d"></div> יער שחור</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#1a3a7a"></div> מינכן</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#8b0000"></div> אירוע מיוחד</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#7a5a00"></div> נסיעה / מעבר</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#e65100"></div> אוכל</div>
+      <div class="leg-item" style="margin-right:auto"></div>
+      <button onclick="clearAll()" style="font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid #ccc;background:#fff;cursor:pointer;color:#666">🗑 נקה הכל</button>
+    </div>
+
+    <div id="calendarEl"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// DATA
+// ══════════════════════════════════════
+const DAYS = [
+  { id:'d1', label:'יום 1 – רביעי', date:'07.10', class:'tr', hclass:'tr', icon:'🚐',
+    title:'הגעה מציריך', fixed:[
+      { emoji:'✈️', name:'טיסה ת"א → ציריך', dur:'3:20', meta:'07:00–10:20', color:'drive' },
+      { emoji:'🚐', name:'איסוף רכב + נסיעה ל-Hinterzarten', dur:'2:00', meta:'~10:30–12:30', color:'drive' },
+    ]},
+  { id:'d2', label:'יום 2 – חמישי', date:'08.10', class:'sp', hclass:'sp', icon:'🎢',
+    title:'Europa Park – יום שלם', fixed:[
+      { emoji:'🚐', name:'נסיעה ל-Europa Park', dur:'0:45', meta:'~08:15', color:'drive' },
+      { emoji:'🎢', name:'Europa Park (כרטיס כלול)', dur:'9:00', meta:'09:00–18:00 | €76', color:'special' },
+    ]},
+  { id:'d3', label:'יום 3 – שישי', date:'09.10', class:'fo', hclass:'fo', icon:'🌲',
+    title:'יער + Traumatica בערב', fixed:[
+      { emoji:'👻', name:'Traumatica Halloween Event', dur:'4:30', meta:'19:00–23:30 | €40', color:'special' },
+    ]},
+  { id:'d4', label:'יום 4 – שבת', date:'10.10', class:'fo', hclass:'fo', icon:'🗺️',
+    title:'יום פתוח ביער', fixed:[] },
+  { id:'d5', label:'יום 5 – ראשון', date:'11.10', class:'tr', hclass:'tr', icon:'🚐',
+    title:'יער → מינכן', fixed:[
+      { emoji:'🚐', name:'נסיעה למינכן (ישיר)', dur:'2:30', meta:'בלי עצירות', color:'drive' },
+    ]},
+  { id:'d6', label:'יום 6 – שני', date:'12.10', class:'mu', hclass:'mu', icon:'🏛️',
+    title:'מינכן – קלאסי + אדרנלין', fixed:[] },
+  { id:'d7', label:'יום 7 – שלישי', date:'13.10', class:'mu', hclass:'mu', icon:'🎭',
+    title:'מינכן – תרבות + לילה', fixed:[] },
+  { id:'d8', label:'יום 8 – רביעי', date:'14.10', class:'tr', hclass:'tr', icon:'🛫',
+    title:'טיסה חזרה', fixed:[
+      { emoji:'🛫', name:'טיסה מינכן → ת"א', dur:'3:45', meta:'20:00–00:45 | יש להגיע 17:00', color:'drive' },
+    ]},
+];
+
+const ACTIVITIES = [
+  // ── FOREST ──
+  { id:'ravenna', emoji:'🏞️', name:'Ravenna Gorge', loc:'10 דק\' מ-Hinterzarten', dur:210, durStr:'3:30', price:'חינם', tags:['forest'], color:'forest',
+    desc:'הגיא היפה ביותר ביער | הליכה ~8.8 ק"מ | גשרי עץ + מפלים' },
+  { id:'feldberg', emoji:'🏔️', name:'Feldberg – פסגה + גונדולה', loc:'20 דק\' מ-Hinterzarten', dur:150, durStr:'2:30', price:'~€15', tags:['forest'], color:'forest',
+    desc:'הנקודה הגבוהה ביותר ביער (1,493מ\') | נוף לאלפים' },
+  { id:'belchen', emoji:'⛰️', name:'Belchen – פנורמה 360°', loc:'35 דק\' מ-Hinterzarten', dur:150, durStr:'2:30', price:'~€14', tags:['forest'], color:'forest',
+    desc:'גונדולה + הליכה קצרה | נוף הכי יפה ביער' },
+  { id:'schluchsee', emoji:'🌊', name:'אגם Schluchsee', loc:'15 דק\' מ-Hinterzarten', dur:120, durStr:'2:00', price:'חינם / €12 סירה', tags:['forest'], color:'forest',
+    desc:'האגם הגדול ביותר ביער | שלווה, סירות, הליכה' },
+  { id:'titisee', emoji:'⛵', name:'אגם Titisee', loc:'10 דק\' מ-Hinterzarten', dur:150, durStr:'2:30', price:'חינם / €12 סירה', tags:['forest'], color:'forest',
+    desc:'הגלציאלי הציורי ביותר | טיול 90 דק\' + סירות' },
+  { id:'hasenhorn', emoji:'🛷', name:'מגלשת Hasenhorn', loc:'Todtnau | 40 דק\'', dur:120, durStr:'2:00', price:'~€12', tags:['forest'], color:'forest',
+    desc:'2,900 מ\' מגלשת קיץ + כיסא מעופף | נוף מרהיב' },
+  { id:'triberg', emoji:'💧', name:'מפלי Triberg + שעון קוקייה', loc:'35 דק\' מ-Hinterzarten', dur:150, durStr:'2:30', price:'€5', tags:['forest'], color:'forest',
+    desc:'163 מ\' / 7 מפלים | הגדולים בגרמניה + שעון קוקייה ענקי' },
+  { id:'caracalla', emoji:'♨️', name:'Caracalla Therme – Baden-Baden', loc:'45 דק\'', dur:180, durStr:'3:00', price:'€25–30', tags:['forest'], color:'forest',
+    desc:'מרחצאות תרמיים רומאיים | ספא מושלם אחרי Traumatica' },
+  { id:'freiburg', emoji:'🏙️', name:'Freiburg im Breisgau', loc:'35 דק\'', dur:240, durStr:'4:00', price:'חינם', tags:['forest'], color:'forest',
+    desc:'קתדרלה + שוק + תעלות רחוב | עיר יפה ותוססת' },
+  { id:'stblasien', emoji:'⛪', name:'Sankt Blasien – כיפה ענקית', loc:'30 דק\'', dur:90, durStr:'1:30', price:'חינם', tags:['forest'], color:'forest',
+    desc:'קתדרלה בסגנון פנתיאון רומאי | לא מוכר לתיירים' },
+  { id:'mehliskopf', emoji:'🎿', name:'Mehliskopf Alpine Coaster', loc:'50 דק\'', dur:90, durStr:'1:30', price:'€4/רידה', tags:['forest'], color:'forest',
+    desc:'מגלשת אלפינה קצרה ומהנה' },
+  { id:'pool_hotel', emoji:'🏊', name:'בריכת המלון + ספא', loc:'Hotel Reppert', dur:90, durStr:'1:30', price:'כלול', tags:['forest'], color:'forest',
+    desc:'3 בריכות, ספא 1,000 מ"ר, סאונה' },
+
+  // ── TRAVEL/ROUTE ──
+  { id:'lindau', emoji:'🏝️', name:'Lindau – אי על הבודנזה', loc:'~1.5 שעות נסיעה', dur:180, durStr:'3:00', price:'חינם', tags:['travel','drive'], color:'travel',
+    desc:'אי קסום | נמל ציורי | נוף לאלפים | רחובות אבן' },
+  { id:'neuschwanstein', emoji:'🏰', name:'טירת Neuschwanstein', loc:'~2 שעות נסיעה', dur:240, durStr:'4:00', price:'€13', tags:['travel','drive'], color:'travel',
+    desc:'טירת דיסני המקורית | ⚠️ הזמינו כרטיסים מראש!' },
+  { id:'augsburg', emoji:'🏛️', name:'Augsburg – Fuggerei', loc:'~2 שעות נסיעה', dur:180, durStr:'3:00', price:'€4', tags:['travel','drive'], color:'travel',
+    desc:'שכונת עניים מ-1516 שעדיין פעילה | עיר רומאית עתיקה' },
+  { id:'starnberg', emoji:'🌊', name:'אגם Starnberg', loc:'30 דק\' מ-מינכן', dur:120, durStr:'2:00', price:'חינם', tags:['travel','drive'], color:'travel',
+    desc:'ציורי | מקום מותו של לודוויג ה-II | ארוחה על המים' },
+
+  // ── MUNICH ──
+  { id:'marienplatz', emoji:'🔔', name:'Marienplatz + Glockenspiel', loc:'מרכז מינכן', dur:90, durStr:'1:30', price:'חינם', tags:['munich'], color:'munich',
+    desc:'לב מינכן | Glockenspiel ב-11:00 | Viktualienmarkt' },
+  { id:'bmw', emoji:'🚗', name:'BMW Welt + Museum', loc:'U3 Olympiazentrum', dur:150, durStr:'2:30', price:'חינם', tags:['munich'], color:'munich',
+    desc:'מוזיאון מרשים בחינם | ממול האצטדיון האולימפי' },
+  { id:'deutsches', emoji:'🏛️', name:'Deutsches Museum', loc:'ליד נהר Isar', dur:180, durStr:'3:00', price:'€14', tags:['munich'], color:'munich',
+    desc:'הגדול בעולם למדע וטכנולוגיה | מטוסים, רכבות, חלל' },
+  { id:'english_garden', emoji:'🌳', name:'English Garden + Eisbachwelle', loc:'מינכן', dur:120, durStr:'2:00', price:'חינם', tags:['munich'], color:'munich',
+    desc:'פארק ענק + גלישת גלים בלב העיר | גן-בירה' },
+  { id:'f1sim', emoji:'🏎️', name:'F1 Simulator', loc:'Race Experience Munich', dur:90, durStr:'1:30', price:'~€60', tags:['munich'], color:'munich',
+    desc:'סימולטור מקצועי | הזמינו מראש!' },
+  { id:'karting', emoji:'🏁', name:'קארטינג – Go-Kart Welt', loc:'Aschheim | 20 דק\'', dur:90, durStr:'1:30', price:'~€30', tags:['munich'], color:'munich',
+    desc:'קארטינג מהיר | ~20 דק\' מהמרכז' },
+  { id:'escape', emoji:'🔐', name:'חדר בריחה – Exit the Room', loc:'מרכז מינכן', dur:75, durStr:'1:15', price:'~€25', tags:['munich'], color:'munich',
+    desc:'60 דק\' לשחק + 15 דק\' הכנה/סיכום | ל-5–6 שחקנים' },
+  { id:'paulaner', emoji:'🏭', name:'Paulaner Brewery Tour', loc:'מינכן', dur:120, durStr:'2:00', price:'~€25', tags:['munich'], color:'munich',
+    desc:'סיור מבשלה + טעימות בירה | הזמינו מראש' },
+  { id:'olympic', emoji:'🏟️', name:'Olympiapark Munich', loc:'מינכן צפון', dur:90, durStr:'1:30', price:'חינם/€9', tags:['munich'], color:'munich',
+    desc:'אצטדיון 1972 + מגדל תצפית | ליד BMW Welt' },
+  { id:'allianz', emoji:'⚽', name:'משחק באיירן מינכן', loc:'Allianz Arena', dur:180, durStr:'3:00', price:'€40–100', tags:['munich'], color:'munich',
+    desc:'⚠️ בדקו לוח 26/27 (יולי 2026) | fcbayern.com' },
+  { id:'viktual', emoji:'🛒', name:'Viktualienmarkt – שוק', loc:'מרכז מינכן', dur:60, durStr:'1:00', price:'חינם', tags:['munich'], color:'munich',
+    desc:'שוק איכרים | ארוחת בוקר / צהריים מעולה' },
+
+  // ── FOOD ──
+  { id:'hofbrau', emoji:'🍺', name:'Hofbräuhaus', loc:'מרכז מינכן', dur:90, durStr:'1:30', price:'€25–35', tags:['food'], color:'food',
+    desc:'האייקון של מינכן | חובה לפחות פעם אחת' },
+  { id:'augustiner', emoji:'🌾', name:'Augustiner Bräustuben', loc:'מינכן', dur:90, durStr:'1:30', price:'€30–40', tags:['food'], color:'food',
+    desc:'הבירה הטובה ביותר לפי מקומיים | אווירה מקסימה' },
+  { id:'franziskaner', emoji:'🥩', name:'Zum Franziskaner', loc:'מינכן', dur:90, durStr:'1:30', price:'€35–45', tags:['food'], color:'food',
+    desc:'מסעדה בוורסטית מ-1363! | שניצל + כנפליים מסורתיות' },
+  { id:'tantris', emoji:'⭐', name:'Tantris – פינה-דיינינג', loc:'מינכן', dur:150, durStr:'2:30', price:'€80–120', tags:['food'], color:'food',
+    desc:'ארוחת פרידה מושקעת | הזמינו 2+ חודשים מראש!' },
+  { id:'hirsch', emoji:'🦌', name:'Landgasthof Hirschen', loc:'Hinterzarten', dur:90, durStr:'1:30', price:'€30–40', tags:['food','forest'], color:'food',
+    desc:'ארוחת ערב מסורתית ביער | ציד, פטריות, שחור-יער' },
+  { id:'titisee_rest', emoji:'🌅', name:'מסעדה על שפת Titisee', loc:'Titisee', dur:75, durStr:'1:15', price:'€30–40', tags:['food','forest'], color:'food',
+    desc:'ארוחה עם נוף לאגם ולהרים' },
+  { id:'checkin_forest', emoji:'🏨', name:'צ\'ק-אין Hotel Reppert', loc:'Hinterzarten', dur:30, durStr:'0:30', price:'~€65/לילה לאדם', tags:['forest'], color:'forest',
+    desc:'בריכות + ספא | ★★★★ | 4 לילות' },
+  { id:'checkout_forest', emoji:'🧳', name:'צ\'ק-אאוט יער שחור', loc:'Hinterzarten', dur:30, durStr:'0:30', price:'', tags:['travel'], color:'travel',
+    desc:'ארוז + יצא' },
+  { id:'checkin_munich', emoji:'🏨', name:'צ\'ק-אין מינכן', loc:'Motel One Sendlinger Tor', dur:30, durStr:'0:30', price:'~€50/לילה לאדם', tags:['munich'], color:'munich',
+    desc:'מרכז | ★★★ | דיזיין | 3 לילות' },
+  { id:'airport_munich', emoji:'🛫', name:'יציאה לשדה התעופה', loc:'מינכן → MUC', dur:60, durStr:'1:00', price:'', tags:['travel'], color:'travel',
+    desc:'הגיעו 3 שעות לפני → יציאה עד 17:00' },
+];
+
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let calendarData = {}; // dayId -> [actId, ...]
+DAYS.forEach(d => { calendarData[d.id] = []; });
+let dragId = null;
+let dragFrom = null; // null = warehouse, 'dayId' = calendar
+let activeFilter = 'all';
+
+// ══════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════
+function getAct(id) { return ACTIVITIES.find(a => a.id === id); }
+function isPlaced(id) { return Object.values(calendarData).some(arr => arr.includes(id)); }
+function totalMinutes(dayId) {
+  const fixed = DAYS.find(d => d.id === dayId).fixed;
+  const fixedMins = fixed.reduce((s, f) => {
+    const [h, m] = f.dur.split(':').map(Number);
+    return s + h * 60 + m;
+  }, 0);
+  const actMins = calendarData[dayId].reduce((s, id) => {
+    const a = getAct(id);
+    return a ? s + a.dur : s;
+  }, 0);
+  return fixedMins + actMins;
+}
+function fmtMins(m) {
+  const h = Math.floor(m / 60), mn = m % 60;
+  return mn ? `${h}ש' ${mn}ד'` : `${h} שעות`;
+}
+function totalTripMins() {
+  return DAYS.reduce((s, d) => s + totalMinutes(d.id), 0);
+}
+
+// ══════════════════════════════════════
+// RENDER WAREHOUSE
+// ══════════════════════════════════════
+function renderWarehouse() {
+  const list = document.getElementById('actsList');
+  const filter = activeFilter;
+  const visible = ACTIVITIES.filter(a =>
+    filter === 'all' ||
+    (filter === 'drive' && a.tags.includes('drive')) ||
+    a.tags.includes(filter)
+  );
+  list.innerHTML = visible.map(a => {
+    const placed = isPlaced(a.id);
+    return `<div class="act-card ${placed ? 'placed' : ''}"
+      id="wh_${a.id}"
+      draggable="${!placed}"
+      ondragstart="onDragStart(event,'${a.id}',null)"
+      ondragend="onDragEnd(event)">
+      <div class="act-drag-hint">⠿</div>
+      <div class="act-card-top">
+        <div class="act-emoji">${a.emoji}</div>
+        <div class="act-info">
+          <div class="act-name">${a.name}</div>
+          <div class="act-loc">📍 ${a.loc}</div>
+          <div class="act-meta">
+            <span class="act-tag tag-${a.color}">${tagLabel(a.color)}</span>
+            <span class="act-dur">⏱ ${a.durStr}</span>
+            <span class="act-price">💶 ${a.price}</span>
+          </div>
+          <div style="font-size:11px;color:#888;margin-top:4px">${a.desc}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function tagLabel(c) {
+  const map = { forest:'🌲 יער', munich:'🏙️ מינכן', travel:'🚐 מסלול',
+    special:'⭐ מיוחד', food:'🍽️ אוכל', drive:'🗺️ דרך' };
+  return map[c] || c;
+}
+
+// ══════════════════════════════════════
+// RENDER CALENDAR
+// ══════════════════════════════════════
+function renderCalendar() {
+  const el = document.getElementById('calendarEl');
+  el.innerHTML = DAYS.map(day => {
+    const mins = totalMinutes(day.id);
+    const placed = calendarData[day.id];
+    const fixedHtml = day.fixed.map(f => `
+      <div class="placed-act pa-${f.color}">
+        <div class="pa-emoji">${f.emoji}</div>
+        <div class="pa-body">
+          <div class="pa-name">${f.name}</div>
+          <div class="pa-meta">${f.meta}</div>
+        </div>
+        <div class="pa-dur-badge">⏱ ${f.dur}</div>
+      </div>`).join('');
+
+    const placedHtml = placed.map(id => {
+      const a = getAct(id);
+      if (!a) return '';
+      return `<div class="placed-act pa-${a.color}"
+        draggable="true"
+        ondragstart="onDragStart(event,'${a.id}','${day.id}')"
+        ondragend="onDragEnd(event)">
+        <button class="pa-remove" onclick="removeFromDay('${day.id}','${a.id}')">✕</button>
+        <div class="pa-emoji">${a.emoji}</div>
+        <div class="pa-body">
+          <div class="pa-name">${a.name}</div>
+          <div class="pa-meta">${a.desc}</div>
+        </div>
+        <div class="pa-dur-badge">⏱ ${a.durStr}</div>
+      </div>`;
+    }).join('');
+
+    const dropHint = placed.length === 0 && day.fixed.length === 0
+      ? `<div class="drop-hint">גרור לכאן פעילויות מהמחסן</div>` : '';
+
+    return `<div class="day-col">
+      <div class="day-head ${day.hclass}">
+        <span class="day-label ${day.class}">${day.label}</span>
+        <div class="day-title-wrap">
+          <div class="day-title">${day.icon} ${day.title}</div>
+          <div class="day-date">${day.date}</div>
+        </div>
+        <div class="day-total-time">⏱ ${fmtMins(mins)}</div>
+      </div>
+      <div class="time-grid"
+        ondragover="onDragOver(event,'${day.id}')"
+        ondragleave="onDragLeave(event,'${day.id}')"
+        ondrop="onDrop(event,'${day.id}')"
+        id="slot_${day.id}"
+        style="padding:8px;min-height:60px">
+        ${fixedHtml}
+        ${placedHtml}
+        ${dropHint}
+      </div>
+    </div>`;
+  }).join('');
+
+  // budget display
+  const total = totalTripMins();
+  document.getElementById('budgetDisplay').textContent = `⏱ סה"כ: ${fmtMins(total)}`;
+}
+
+// ══════════════════════════════════════
+// DRAG & DROP
+// ══════════════════════════════════════
+function onDragStart(e, actId, fromDay) {
+  dragId = actId;
+  dragFrom = fromDay;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', actId);
+  setTimeout(() => {
+    const el = document.getElementById('wh_' + actId);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function onDragEnd(e) {
+  const el = document.getElementById('wh_' + dragId);
+  if (el) el.classList.remove('dragging');
+  // clear all drag-over states
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function onDragOver(e, dayId) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.getElementById('slot_' + dayId).classList.add('drag-over');
+}
+
+function onDragLeave(e, dayId) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    document.getElementById('slot_' + dayId).classList.remove('drag-over');
+  }
+}
+
+function onDrop(e, dayId) {
+  e.preventDefault();
+  const slot = document.getElementById('slot_' + dayId);
+  slot.classList.remove('drag-over');
+
+  if (!dragId) return;
+
+  // if moving from another day, remove from there first
+  if (dragFrom && dragFrom !== dayId) {
+    calendarData[dragFrom] = calendarData[dragFrom].filter(id => id !== dragId);
+  }
+
+  // add to this day if not already there
+  if (!calendarData[dayId].includes(dragId)) {
+    calendarData[dayId].push(dragId);
+  }
+
+  dragId = null;
+  dragFrom = null;
+  render();
+}
+
+function removeFromDay(dayId, actId) {
+  calendarData[dayId] = calendarData[dayId].filter(id => id !== actId);
+  render();
+}
+
+// ══════════════════════════════════════
+// FILTER
+// ══════════════════════════════════════
+function filterActs(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderWarehouse();
+}
+
+// ══════════════════════════════════════
+// CLEAR ALL
+// ══════════════════════════════════════
+function clearAll() {
+  if (!confirm('לנקות את כל התוכנית?')) return;
+  DAYS.forEach(d => { calendarData[d.id] = []; });
+  render();
+}
+
+// ══════════════════════════════════════
+// MAIN RENDER
+// ══════════════════════════════════════
+function render() {
+  renderWarehouse();
+  renderCalendar();
+}
+
+render();
+</script>
+</body>
+</html>

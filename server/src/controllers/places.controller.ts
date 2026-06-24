@@ -32,7 +32,7 @@ export const getPlaces = async (req: AuthRequest, res: Response): Promise<void> 
 export const addPlace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { tripId } = req.params as { tripId: string };
-    const { name, lat, lng, notes } = req.body;
+    const { name, lat, lng, notes, mapsUrl, date, category } = req.body;
 
     const member = await prisma.tripMember.findUnique({
       where: { userId_tripId: { userId: req.userId!, tripId } },
@@ -46,7 +46,7 @@ export const addPlace = async (req: AuthRequest, res: Response): Promise<void> =
     const count = await prisma.tripPlace.count({ where: { tripId } });
 
     const place = await prisma.tripPlace.create({
-      data: { tripId, name: name.trim(), lat: Number(lat), lng: Number(lng), notes: notes?.trim() || null, order: count },
+      data: { tripId, name: name.trim(), lat: Number(lat), lng: Number(lng), notes: notes?.trim() || null, mapsUrl: mapsUrl?.trim() || null, date: date?.trim() || null, order: count, category: category?.trim() || 'other' },
       include: { photos: true },
     });
 
@@ -61,7 +61,7 @@ export const addPlace = async (req: AuthRequest, res: Response): Promise<void> =
 export const updatePlace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { placeId } = req.params as { placeId: string };
-    const { name, notes } = req.body;
+    const { name, notes, date, category } = req.body;
 
     const place = await prisma.tripPlace.findUnique({ where: { id: placeId } });
     if (!place) { res.status(404).json({ error: 'מקום לא נמצא' }); return; }
@@ -73,7 +73,12 @@ export const updatePlace = async (req: AuthRequest, res: Response): Promise<void
 
     const updated = await prisma.tripPlace.update({
       where: { id: placeId },
-      data: { name: name?.trim() || place.name, notes: notes?.trim() ?? place.notes },
+      data: {
+        name: name?.trim() || place.name,
+        notes: notes?.trim() ?? place.notes,
+        ...(date !== undefined ? { date: date?.trim() || null } : {}),
+        ...(category !== undefined ? { category: category?.trim() || 'other' } : {}),
+      },
       include: { photos: true },
     });
 

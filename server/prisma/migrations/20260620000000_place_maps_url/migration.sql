@@ -1,0 +1,1 @@
+ALTER TABLE "TripPlace" ADD COLUMN "mapsUrl" TEXT;

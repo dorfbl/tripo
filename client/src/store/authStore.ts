@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import type { User } from '../types';
 import apiClient from '../api/client';
 
+const clearPersistedStores = () => {
+  localStorage.removeItem('tripo-active-trip');
+};
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -22,6 +26,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     set({ isLoading: true });
     try {
+      clearPersistedStores();
       const res = await apiClient.post('/api/auth/login', { email, password });
       const { token, user } = res.data;
       localStorage.setItem('token', token);
@@ -35,6 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (name, email, password) => {
     set({ isLoading: true });
     try {
+      clearPersistedStores();
       const res = await apiClient.post('/api/auth/register', { name, email, password });
       const { token, user } = res.data;
       localStorage.setItem('token', token);
@@ -46,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    clearPersistedStores();
     localStorage.removeItem('token');
     set({ user: null, token: null });
   },

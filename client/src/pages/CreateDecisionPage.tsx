@@ -31,6 +31,7 @@ export const CreateDecisionPage: React.FC = () => {
   const [category, setCategory] = useState<DecisionCategory>('OTHER');
   const [options, setOptions] = useState(['', '']);
   const [isSecretVote, setIsSecretVote] = useState(false);
+  const [hideResultsUntilClosed, setHideResultsUntilClosed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -55,6 +56,7 @@ export const CreateDecisionPage: React.FC = () => {
         category,
         options: opts,
         isSecretVote,
+        hideResultsUntilClosed,
       });
       navigate(`/trip/${tripId}/decisions`, { state: { newDecisionId: data.id } });
     } catch {
@@ -204,7 +206,7 @@ export const CreateDecisionPage: React.FC = () => {
           <div className="flex items-center justify-between py-3 border-t border-neutral-100">
             <div>
               <p className="text-sm font-bold text-neutral-800 flex items-center gap-1.5">
-                <span>{isSecretVote ? '🔒' : '👁️'}</span>
+                <span>👤</span>
                 {isSecretVote ? 'הצבעה חשאית' : 'הצבעה גלויה'}
               </p>
               <p className="text-xs text-neutral-400 mt-0.5">
@@ -216,6 +218,25 @@ export const CreateDecisionPage: React.FC = () => {
               className={`relative w-12 h-6 rounded-full transition-colors ${isSecretVote ? 'bg-brand-500' : 'bg-neutral-200'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isSecretVote ? 'translate-x-0.5' : 'translate-x-6'}`} />
+            </button>
+          </div>
+
+          {/* Hide results until closed toggle */}
+          <div className="flex items-center justify-between py-3 border-t border-neutral-100">
+            <div>
+              <p className="text-sm font-bold text-neutral-800 flex items-center gap-1.5">
+                <span>🔒</span>
+                {hideResultsUntilClosed ? 'תוצאות מוסתרות' : 'תוצאות גלויות'}
+              </p>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {hideResultsUntilClosed ? 'התוצאות יוצגו רק לאחר סגירת ההצבעה' : 'כולם רואים את הספירה בזמן אמת'}
+              </p>
+            </div>
+            <button
+              onClick={() => setHideResultsUntilClosed(p => !p)}
+              className={`relative w-12 h-6 rounded-full transition-colors ${hideResultsUntilClosed ? 'bg-brand-500' : 'bg-neutral-200'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${hideResultsUntilClosed ? 'translate-x-0.5' : 'translate-x-6'}`} />
             </button>
           </div>
 

@@ -15,14 +15,12 @@ model User {
   avatarUrl    String?
   createdAt    DateTime @default(now())
 
-  trips              TripMember[]
-  answers            QuestionAnswer[]
-  votes              DestinationVote[]
-  expensesPaid       TripExpense[]          @relation("ExpensesPaid")
+  trips                 TripMember[]
+  expensesPaid          TripExpense[]          @relation("ExpensesPaid")
   expenseParticipations ExpenseParticipant[]
-  decisionsCreated   Decision[]             @relation("DecisionsCreated")
-  decisionVotes      DecisionVote[]         @relation("DecisionVotesByUser")
-  linksCreated       TripLink[]             @relation("LinksCreated")
+  decisionsCreated      Decision[]             @relation("DecisionsCreated")
+  decisionVotes         DecisionVote[]         @relation("DecisionVotesByUser")
+  linksCreated          TripLink[]             @relation("LinksCreated")
 }
 
 model Trip {
@@ -30,37 +28,37 @@ model Trip {
   name            String
   startDate       DateTime?
   endDate         DateTime?
-  status          TripStatus @default(PLANNING)
+  status          TripStatus @default(PLAN)
   inviteCode      String     @unique @default(uuid())
   defaultCurrency String     @default("ILS")
+  ownerId         String     @default("")
   createdAt       DateTime   @default(now())
 
-  members      TripMember[]
-  destinations SuggestedDestination[]
-  expenses     TripExpense[]
-  places       TripPlace[]
-  decisions    Decision[]
-  links        TripLink[]
+  members           TripMember[]
+  expenses          TripExpense[]
+  places            TripPlace[]
+  decisions         Decision[]
+  links             TripLink[]
+  plannerActivities PlannerActivity[]
+  plannerEvents     PlannerEvent[]
 }
 
 enum TripStatus {
-  PLANNING
-  VOTING
-  BOOKED
-  ONGOING
-  COMPLETED
+  PLAN
+  LIVE
+  FINISHED
+  CANCELED
 }
 
 model TripMember {
-  id          String     @id @default(uuid())
-  userId      String
-  tripId      String
-  role        MemberRole @default(MEMBER)
-  joinedAt    DateTime   @default(now())
-  completedQuestionnaire Boolean @default(false)
+  id       String     @id @default(uuid())
+  userId   String
+  tripId   String
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
 
-  user        User     @relation(fields: [userId], references: [id])
-  trip        Trip     @relation(fields: [tripId], references: [id])
+  user     User @relation(fields: [userId], references: [id])
+  trip     Trip @relation(fields: [tripId], references: [id])
 
   @@unique([userId, tripId])
 }
@@ -70,54 +68,6 @@ enum MemberRole {
   MEMBER
 }
 
-model Question {
-  id          String       @id @default(uuid())
-  text        String       @unique
-  category    String
-  type        QuestionType
-  order       Int
-  options     Json?
-  isActive    Boolean      @default(true)
-
-  answers     QuestionAnswer[]
-}
-
-enum QuestionType {
-  SINGLE_CHOICE
-  MULTI_CHOICE
-  SCALE
-  TEXT
-}
-
-model QuestionAnswer {
-  id         String   @id @default(uuid())
-  userId     String
-  tripId     String
-  questionId String
-  answer     Json
-  createdAt  DateTime @default(now())
-
-  user       User     @relation(fields: [userId], references: [id])
-  question   Question @relation(fields: [questionId], references: [id])
-
-  @@unique([userId, tripId, questionId])
-}
-
-model SuggestedDestination {
-  id          String   @id @default(uuid())
-  tripId      String
-  name        String
-  country     String
-  description String
-  whyItFits   String
-  matchScore  Float
-  climate     String?
-  highlights  Json
-  createdAt   DateTime @default(now())
-
-  trip        Trip     @relation(fields: [tripId], references: [id])
-  votes       DestinationVote[]
-}
 
 // ===== הוצאות (Splitwise) =====
 
@@ -159,7 +109,10 @@ model TripPlace {
   lat       Float
   lng       Float
   notes     String?
+  mapsUrl   String?
+  date      String?
   order     Int      @default(0)
+  category  String   @default("other")
   createdAt DateTime @default(now())
 
   trip      Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -229,19 +182,6 @@ model TripLink {
   createdBy User @relation("LinksCreated", fields: [createdByUserId], references: [id])
 }
 
-model DestinationVote {
-  id            String   @id @default(uuid())
-  destinationId String
-  userId        String
-  score         Int
-  createdAt     DateTime @default(now())
-
-  destination   SuggestedDestination @relation(fields: [destinationId], references: [id])
-  user          User     @relation(fields: [userId], references: [id])
-
-  @@unique([destinationId, userId])
-}
-
 // ===== החלטות =====
 
 enum DecisionStatus {
@@ -278,7 +218,8 @@ model Decision {
   finalOptionId   String?
   dueDate         DateTime?
   actionNote      String?
-  isSecretVote    Boolean          @default(false)
+  isSecretVote           Boolean          @default(false)
+  hideResultsUntilClosed Boolean          @default(false)
   createdByUserId String
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -315,4 +256,88 @@ model DecisionVote {
   user     User           @relation("DecisionVotesByUser", fields: [userId], references: [id])
 
   @@unique([decisionId, optionId, userId])
+}
+
+// ===== מתכנן טיול =====
+
+model PlannerActivity {
+  id           String   @id @default(uuid())
+  tripId       String
+  name         String
+  emoji        String   @default("📌")
+  location     String?
+  description  String?
+  durationMins Int      @default(60)
+  cost         String?
+  category     String   @default("other")
+  mapsUrl      String?
+  url          String?
+  color        String   @default("blue")
+  createdAt    DateTime @default(now())
+
+  trip   Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  events PlannerEvent[]
+  files  PlannerActivityFile[]
+  votes  PlannerActivityVote[]
+}
+
+model PlannerActivityVote {
+  id         String   @id @default(uuid())
+  activityId String
+  tripId     String
+  userId     String
+  vote       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  activity PlannerActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@index([tripId])
+}
+
+model PlannerActivityFile {
+  id           String   @id @default(uuid())
+  activityId   String
+  filename     String
+  originalName String
+  mimeType     String   @default("application/octet-stream")
+  size         Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  activity PlannerActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+}
+
+model PlannerEvent {
+  id           String   @id @default(uuid())
+  tripId       String
+  activityId   String?
+  title        String
+  date         String
+  startMinute  Int      @default(0)
+  durationMins Int      @default(60)
+  color        String   @default("blue")
+  notes        String?
+  allDay       Boolean  @default(false)
+  url          String?
+  mapsUrl      String?
+  cost         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trip     Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  activity PlannerActivity?   @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  files    PlannerEventFile[]
+}
+
+model PlannerEventFile {
+  id           String   @id @default(uuid())
+  eventId      String
+  filename     String
+  originalName String
+  mimeType     String   @default("application/octet-stream")
+  size         Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  event PlannerEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 }

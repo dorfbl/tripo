@@ -2,18 +2,9 @@ import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
-const ADMIN_EMAILS = ['test@test.com', 'dorfbl@gmail.com'];
-
 export const createTrip = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, startDate, endDate } = req.body;
-
-    // רק מנהלי מערכת יכולים ליצור טיולים
-    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
-    if (!user || !ADMIN_EMAILS.includes(user.email)) {
-      res.status(403).json({ error: 'רק מנהלי מערכת יכולים ליצור טיולים חדשים' });
-      return;
-    }
 
     if (!name) {
       res.status(400).json({ error: 'שם הטיול הוא שדה חובה' });
@@ -25,6 +16,7 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
         name,
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
+        ownerId: req.userId!,
         members: {
           create: {
             userId: req.userId!,
@@ -56,7 +48,6 @@ export const getTrips = async (req: AuthRequest, res: Response): Promise<void> =
         members: {
           include: { user: { select: { id: true, name: true, avatarUrl: true } } },
         },
-        _count: { select: { destinations: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -77,11 +68,6 @@ export const getTrip = async (req: AuthRequest, res: Response): Promise<void> =>
       include: {
         members: {
           include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
-        },
-        destinations: {
-          include: {
-            votes: { select: { userId: true, score: true } },
-          },
         },
       },
     });
@@ -132,6 +118,109 @@ export const joinTrip = async (req: AuthRequest, res: Response): Promise<void> =
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בהצטרפות לטיול' });
+  }
+};
+
+export const updateTrip = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = req.params['id'] as string;
+    const { name, startDate, endDate, status } = req.body;
+
+    const member = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId: id } },
+    });
+    if (!member)                { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+    if (member.role !== 'ADMIN') { res.status(403).json({ error: 'רק מנהל הטיול יכול לערוך' }); return; }
+
+    if (name !== undefined && !name?.trim()) {
+      res.status(400).json({ error: 'שם הטיול לא יכול להיות ריק' }); return;
+    }
+
+    const VALID_STATUSES = ['PLAN', 'LIVE', 'FINISHED', 'CANCELED'];
+    if (status !== undefined && !VALID_STATUSES.includes(status)) {
+      res.status(400).json({ error: 'סטטוס לא תקין' }); return;
+    }
+
+    const trip = await prisma.trip.update({
+      where: { id },
+      data: {
+        ...(name      !== undefined && { name: name.trim() }),
+        ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
+        ...(endDate   !== undefined && { endDate:   endDate   ? new Date(endDate)   : null }),
+        ...(status    !== undefined && { status: status as any }),
+      },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+        },
+      },
+    });
+    res.json({ trip });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בעדכון הטיול' });
+  }
+};
+
+export const removeMember = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id, userId: targetUserId } = req.params as { id: string; userId: string };
+
+    const trip = await prisma.trip.findUnique({ where: { id } });
+    if (!trip) { res.status(404).json({ error: 'טיול לא נמצא' }); return; }
+
+    const admin = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId: id } },
+    });
+    if (!admin)                { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+    if (admin.role !== 'ADMIN') { res.status(403).json({ error: 'רק מנהל יכול להסיר חברים' }); return; }
+    if (targetUserId === req.userId) { res.status(400).json({ error: 'לא ניתן להסיר את עצמך' }); return; }
+    if (targetUserId === trip.ownerId) { res.status(400).json({ error: 'לא ניתן להסיר את מייסד הטיול' }); return; }
+
+    const target = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: targetUserId, tripId: id } },
+    });
+    if (!target) { res.status(404).json({ error: 'חבר לא נמצא בטיול' }); return; }
+
+    await prisma.tripMember.delete({
+      where: { userId_tripId: { userId: targetUserId, tripId: id } },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בהסרת חבר' });
+  }
+};
+
+export const changeMemberRole = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id, userId: targetUserId } = req.params as { id: string; userId: string };
+    const { role } = req.body as { role: 'ADMIN' | 'MEMBER' };
+
+    if (role !== 'ADMIN' && role !== 'MEMBER') {
+      res.status(400).json({ error: 'תפקיד לא תקין' }); return;
+    }
+
+    const trip = await prisma.trip.findUnique({ where: { id } });
+    if (!trip) { res.status(404).json({ error: 'טיול לא נמצא' }); return; }
+
+    const admin = await prisma.tripMember.findUnique({
+      where: { userId_tripId: { userId: req.userId!, tripId: id } },
+    });
+    if (!admin)                { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
+    if (admin.role !== 'ADMIN') { res.status(403).json({ error: 'רק מנהל יכול לשנות תפקידים' }); return; }
+    if (targetUserId === trip.ownerId) { res.status(400).json({ error: 'לא ניתן לשנות את תפקיד מייסד הטיול' }); return; }
+    if (targetUserId === req.userId)  { res.status(400).json({ error: 'לא ניתן לשנות את התפקיד שלך' }); return; }
+
+    const updated = await prisma.tripMember.update({
+      where: { userId_tripId: { userId: targetUserId, tripId: id } },
+      data: { role },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+    res.json({ member: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בשינוי תפקיד' });
   }
 };
 

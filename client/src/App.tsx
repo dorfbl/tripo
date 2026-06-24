@@ -8,10 +8,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CreateTripPage } from './pages/CreateTripPage';
 import { TripPage } from './pages/TripPage';
-import { QuestionnairePage } from './pages/QuestionnairePage';
-import { DestinationsPage } from './pages/DestinationsPage';
 import { JoinPage } from './pages/JoinPage';
-import { AdminQuestionsPage } from './pages/AdminQuestionsPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ExpenseFormPage } from './pages/ExpenseFormPage';
 import { MapPage } from './pages/MapPage';
@@ -22,6 +19,8 @@ import { CreateLinkPage } from './pages/CreateLinkPage';
 import { EditLinkPage } from './pages/EditLinkPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { EditProfilePage } from './pages/EditProfilePage';
+import { PlannerPage } from './pages/PlannerPage';
+import { QuestionnairePage } from './pages/QuestionnairePage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token } = useAuthStore();
@@ -82,13 +81,6 @@ export const App: React.FC = () => {
         <Route path="/trip/:id" element={
           <ProtectedRoute><TripPage /></ProtectedRoute>
         } />
-        <Route path="/trip/:id/questionnaire" element={
-          <ProtectedRoute><QuestionnairePage /></ProtectedRoute>
-        } />
-        <Route path="/trip/:id/destinations" element={
-          <ProtectedRoute><DestinationsPage /></ProtectedRoute>
-        } />
-
         <Route path="/trip/:id/expenses" element={
           <ProtectedRoute><ExpensesPage /></ProtectedRoute>
         } />
@@ -118,15 +110,18 @@ export const App: React.FC = () => {
           <ProtectedRoute><EditLinkPage /></ProtectedRoute>
         } />
 
+        <Route path="/trip/:id/planner" element={
+          <ProtectedRoute><PlannerPage /></ProtectedRoute>
+        } />
+        <Route path="/trip/:id/questionnaire" element={
+          <ProtectedRoute><QuestionnairePage /></ProtectedRoute>
+        } />
+
         <Route path="/profile" element={
           <ProtectedRoute><ProfilePage /></ProtectedRoute>
         } />
         <Route path="/profile/edit" element={
           <ProtectedRoute><EditProfilePage /></ProtectedRoute>
-        } />
-
-        <Route path="/admin/questions" element={
-          <ProtectedRoute><AdminQuestionsPage /></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -12,11 +12,10 @@ import apiClient from '../api/client';
 import axios from 'axios';
 
 const STATUS: Record<string, { label: string; color: 'blue' | 'green' | 'yellow' | 'gray' }> = {
-  PLANNING:  { label: 'תכנון',    color: 'blue'   },
-  VOTING:    { label: 'הצבעות',   color: 'yellow' },
-  BOOKED:    { label: 'נקבע',     color: 'green'  },
-  ONGOING:   { label: 'בדרך!',    color: 'green'  },
-  COMPLETED: { label: 'הושלם',    color: 'gray'   },
+  PLAN:     { label: 'תכנון',  color: 'blue'  },
+  LIVE:     { label: 'בדרך!',  color: 'green' },
+  FINISHED: { label: 'הסתיים', color: 'gray'  },
+  CANCELED: { label: 'בוטל',  color: 'gray'  },
 };
 
 export const DashboardPage: React.FC = () => {
@@ -27,7 +26,6 @@ export const DashboardPage: React.FC = () => {
   const location  = useLocation();
 
   const showDashboard = (location.state as { showDashboard?: boolean })?.showDashboard;
-  const isAdmin = user ? ['test@test.com', 'dorfbl@gmail.com'].includes(user.email) : false;
 
   const [inviteCode, setInviteCode] = useState('');
   const [joinError,  setJoinError]  = useState('');
@@ -76,9 +74,7 @@ export const DashboardPage: React.FC = () => {
         <h1 className="text-xl font-bold text-neutral-900">
           {trips.length > 1 ? '✈️ בחר טיול פעיל' : 'הטיולים שלי'}
         </h1>
-        {isAdmin && (
-          <Button onClick={() => navigate('/create-trip')} size="sm">+ טיול חדש</Button>
-        )}
+        <Button onClick={() => navigate('/create-trip')} size="sm">+ טיול חדש</Button>
       </div>
 
       {trips.length > 1 && (
@@ -107,19 +103,13 @@ export const DashboardPage: React.FC = () => {
         <div className="text-center py-12">
           <div className="text-5xl mb-4">🗺️</div>
           <p className="text-neutral-600 font-medium">אין לך טיולים עדיין</p>
-          {isAdmin ? (
-            <>
-              <p className="text-neutral-400 text-sm mt-1">צור טיול חדש או הצטרף לאחד</p>
-              <Button className="mt-4" onClick={() => navigate('/create-trip')}>צור טיול ראשון</Button>
-            </>
-          ) : (
-            <p className="text-neutral-400 text-sm mt-1">הצטרף לטיול עם קוד הזמנה</p>
-          )}
+          <p className="text-neutral-400 text-sm mt-1">צור טיול חדש או הצטרף לאחד</p>
+          <Button className="mt-4" onClick={() => navigate('/create-trip')}>צור טיול ראשון</Button>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           {trips.map((trip: Trip) => {
-            const s = STATUS[trip.status] ?? STATUS.PLANNING;
+            const s = STATUS[trip.status] ?? STATUS.PLAN;
             const myMember = trip.members?.find(m => m.userId === user?.id);
             const isActive = trip.id === activeTripId;
             return (

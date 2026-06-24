@@ -1,0 +1,1 @@
+ALTER TABLE "TripPlace" ADD COLUMN IF NOT EXISTS "category" TEXT NOT NULL DEFAULT 'other';
