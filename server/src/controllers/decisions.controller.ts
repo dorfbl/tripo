@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { timelineDecisionClosed } from '../services/timeline.service';
 
 const includeDecision = {
   options: { orderBy: { createdAt: 'asc' } as const },
@@ -115,6 +116,14 @@ export const closeDecision = async (req: AuthRequest, res: Response) => {
         decidedAt: new Date(),
       },
       include: includeDecision,
+    });
+
+    await timelineDecisionClosed({
+      tripId: decision.tripId,
+      userId,
+      decisionId: updated.id,
+      decisionTitle: updated.title,
+      finalDecision: updated.finalDecision,
     });
 
     res.json(updated);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Button } from '../components/ui/Button';
@@ -10,8 +10,14 @@ export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, isLoading } = useAuthStore();
+  const [showBiometric, setShowBiometric] = useState(false);
+  const { login, loginWithBiometric, isLoading, isBiometricAvailable, hasSavedBiometric } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // בדיקה אם יש אפשרות להתחברות ביומטרית
+    setShowBiometric(isBiometricAvailable() && hasSavedBiometric());
+  }, [isBiometricAvailable, hasSavedBiometric]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +34,20 @@ export const LoginPage: React.FC = () => {
     }
   };
 
+  const handleBiometricLogin = async () => {
+    setError('');
+    try {
+      await loginWithBiometric();
+      navigate('/');
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.error || 'שגיאה באימות ביומטרי');
+      } else {
+        setError('שגיאה באימות ביומטרי');
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -39,6 +59,33 @@ export const LoginPage: React.FC = () => {
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-5 text-neutral-900">כניסה</h2>
+
+          {showBiometric && (
+            <div className="mb-4">
+              <Button
+                onClick={handleBiometricLogin}
+                size="lg"
+                loading={isLoading}
+                className="w-full bg-neutral-900 hover:bg-neutral-800"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <span className="text-xl">🔐</span>
+                  התחבר עם {' '}
+                  {navigator.userAgent.includes('Mac') ? 'Face ID / Touch ID' : 'ביומטריה'}
+                </span>
+              </Button>
+
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-neutral-200"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-neutral-500">או</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <Input
               label="אימייל"

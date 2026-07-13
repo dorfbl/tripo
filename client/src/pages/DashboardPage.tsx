@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/Badge';
 import type { Trip } from '../types';
 import apiClient from '../api/client';
 import axios from 'axios';
+import { tripTabPath } from '../lib/tripNav';
 
 const STATUS: Record<string, { label: string; color: 'blue' | 'green' | 'yellow' | 'gray' }> = {
   PLAN:     { label: 'תכנון',  color: 'blue'  },
@@ -21,7 +22,7 @@ const STATUS: Record<string, { label: string; color: 'blue' | 'green' | 'yellow'
 export const DashboardPage: React.FC = () => {
   const { trips, loadTrips, isLoading } = useTripStore();
   const { user } = useAuthStore();
-  const { activeTripId, setActiveTrip } = useActiveTripStore();
+  const { activeTripId, setActiveTrip, lastTab, lastPlanSub } = useActiveTripStore();
   const navigate  = useNavigate();
   const location  = useLocation();
 
@@ -33,23 +34,25 @@ export const DashboardPage: React.FC = () => {
 
   useEffect(() => { loadTrips(); }, []);
 
+  const openTrip = (tripId: string, tripName?: string) => {
+    if (tripName) setActiveTrip(tripId, tripName);
+    // bare /trip/:id redirects to last used tab
+    navigate(tripTabPath(tripId, lastTab, lastPlanSub));
+  };
+
   // redirect חכם
   useEffect(() => {
     if (isLoading || showDashboard) return;
     if (activeTripId && trips.some(t => t.id === activeTripId)) {
-      // יש טיול פעיל — נווט אליו
-      navigate(`/trip/${activeTripId}`, { replace: true });
+      navigate(tripTabPath(activeTripId, lastTab, lastPlanSub), { replace: true });
     } else if (!isLoading && trips.length === 1) {
-      // טיול יחיד — בחר אוטומטית
       setActiveTrip(trips[0].id, trips[0].name);
-      navigate(`/trip/${trips[0].id}`, { replace: true });
+      navigate(tripTabPath(trips[0].id, lastTab, lastPlanSub), { replace: true });
     }
-    // אם יש כמה טיולים ואין פעיל — נשאר בדף לבחירה
   }, [isLoading, trips, activeTripId, showDashboard]);
 
   const handleSelectTrip = (trip: Trip) => {
-    setActiveTrip(trip.id, trip.name);
-    navigate(`/trip/${trip.id}`);
+    openTrip(trip.id, trip.name);
   };
 
   const handleJoin = async (e: React.FormEvent) => {
@@ -60,7 +63,7 @@ export const DashboardPage: React.FC = () => {
       const res = await apiClient.post(`/api/trips/join/${inviteCode.trim()}`);
       const trip = res.data.trip as Trip;
       setActiveTrip(trip.id, trip.name);
-      navigate(`/trip/${trip.id}`);
+      navigate(tripTabPath(trip.id, lastTab, lastPlanSub));
     } catch (err) {
       setJoinError(axios.isAxiosError(err) ? err.response?.data?.error || 'שגיאה' : 'שגיאה');
     } finally {

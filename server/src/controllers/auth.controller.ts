@@ -39,7 +39,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     res.status(201).json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        aiEnabled: user.aiEnabled,
+      },
     });
   } catch (err) {
     console.error(err);
@@ -74,7 +80,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        aiEnabled: user.aiEnabled,
+      },
     });
   } catch (err) {
     console.error(err);
@@ -89,14 +101,32 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    const { assertCanUpload, recordStorageDelta, LimitError, limitErrorPayload } =
+      await import('../services/limits.service');
+
+    try {
+      await assertCanUpload(req.userId!, req.file.size || 100_000);
+    } catch (err) {
+      if (err instanceof LimitError) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        res.status(err.status).json(limitErrorPayload(err));
+        return;
+      }
+      throw err;
+    }
+
     // מחק תמונה ישנה אם קיימת
     const existing = await prisma.user.findUnique({
       where: { id: req.userId },
       select: { avatarUrl: true },
     });
+    let oldSize = 0;
     if (existing?.avatarUrl) {
       const oldPath = path.join('/home/dor/tripo/uploads', existing.avatarUrl.replace('/uploads/', ''));
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      if (fs.existsSync(oldPath)) {
+        try { oldSize = fs.statSync(oldPath).size; } catch { /* ignore */ }
+        fs.unlinkSync(oldPath);
+      }
     }
 
     // כיווץ התמונה ל-200×200 JPEG איכות 82 (≈40-70KB)
@@ -113,11 +143,14 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
     // מחק את הקובץ המקורי אם שם הקובץ שונה (HEIC → jpg)
     if (originalPath !== outputPath) fs.unlinkSync(originalPath);
 
+    const newSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+    await recordStorageDelta(req.userId!, newSize - oldSize);
+
     const avatarUrl = `/uploads/avatars/${filename}`;
     const user = await prisma.user.update({
       where: { id: req.userId },
       data: { avatarUrl },
-      select: { id: true, name: true, email: true, avatarUrl: true },
+      select: { id: true, name: true, email: true, avatarUrl: true, aiEnabled: true, plan: true },
     });
 
     res.json({ user });
@@ -129,16 +162,19 @@ export const uploadAvatar = async (req: AuthRequest, res: Response): Promise<voi
 
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name } = req.body;
-    if (!name || !name.trim()) {
+    const { name, aiEnabled } = req.body;
+    if (name !== undefined && !name?.trim()) {
       res.status(400).json({ error: 'שם הוא שדה חובה' });
       return;
     }
 
     const user = await prisma.user.update({
       where: { id: req.userId },
-      data: { name: name.trim() },
-      select: { id: true, name: true, email: true, avatarUrl: true },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(aiEnabled !== undefined && { aiEnabled: Boolean(aiEnabled) }),
+      },
+      select: { id: true, name: true, email: true, avatarUrl: true, aiEnabled: true },
     });
 
     res.json({ user });
@@ -152,7 +188,17 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      select: { id: true, name: true, email: true, avatarUrl: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        aiEnabled: true,
+        plan: true,
+        planExpiresAt: true,
+        storageBytesUsed: true,
+        createdAt: true,
+      },
     });
 
     if (!user) {
@@ -160,9 +206,90 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ user });
+    res.json({
+      user: {
+        ...user,
+        storageBytesUsed: Number(user.storageBytesUsed),
+      },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בטעינת פרטי המשתמש' });
+  }
+};
+
+export const registerBiometric = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { credentialId, publicKey } = req.body;
+
+    if (!credentialId || !publicKey) {
+      res.status(400).json({ error: 'נתוני credential חסרים' });
+      return;
+    }
+
+    // בדיקה אם credential כבר קיים
+    const existing = await prisma.biometricCredential.findUnique({
+      where: { credentialId },
+    });
+
+    if (existing) {
+      res.status(400).json({ error: 'credential זה כבר רשום' });
+      return;
+    }
+
+    // יצירת credential חדש
+    await prisma.biometricCredential.create({
+      data: {
+        userId: req.userId!,
+        credentialId,
+        publicKey,
+      },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה ברישום ביומטרי' });
+  }
+};
+
+export const loginBiometric = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { credentialId } = req.body;
+
+    if (!credentialId) {
+      res.status(400).json({ error: 'credential ID חסר' });
+      return;
+    }
+
+    // חיפוש credential
+    const credential = await prisma.biometricCredential.findUnique({
+      where: { credentialId },
+      include: { user: true },
+    });
+
+    if (!credential) {
+      res.status(401).json({ error: 'credential לא נמצא' });
+      return;
+    }
+
+    // יצירת token
+    const token = jwt.sign({ userId: credential.userId }, config.jwtSecret, {
+      expiresIn: '365d',
+    });
+
+    res.json({
+      token,
+      user: {
+        id: credential.user.id,
+        name: credential.user.name,
+        email: credential.user.email,
+        avatarUrl: credential.user.avatarUrl,
+        aiEnabled: credential.user.aiEnabled,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בהתחברות ביומטרית' });
   }
 };

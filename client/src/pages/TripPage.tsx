@@ -38,6 +38,7 @@ function toInputDate(iso: string | null | undefined) {
   return iso.slice(0, 10);
 }
 
+/** טיול hub — members, links, timeline, settings */
 export const TripPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -47,10 +48,10 @@ export const TripPage: React.FC = () => {
 
   const [copied, setCopied] = useState(false);
   const [savingCurrency, setSavingCurrency] = useState(false);
+  const [savingAi, setSavingAi] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [changingRoleUserId, setChangingRoleUserId] = useState<string | null>(null);
 
-  // Edit sheet
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editStart, setEditStart] = useState('');
@@ -122,6 +123,18 @@ export const TripPage: React.FC = () => {
     finally { setSavingCurrency(false); }
   };
 
+  const handleAiToggle = async () => {
+    if (!id || !currentTrip) return;
+    setSavingAi(true);
+    try {
+      await apiClient.put(`/api/trips/${id}`, {
+        aiEnabled: !(currentTrip.aiEnabled !== false),
+      });
+      await loadTrip(id);
+    } catch { /* ignore */ }
+    finally { setSavingAi(false); }
+  };
+
   const copyInvite = () => {
     if (!currentTrip) return;
     navigator.clipboard.writeText(`${window.location.origin}/join/${currentTrip.inviteCode}`);
@@ -140,6 +153,19 @@ export const TripPage: React.FC = () => {
   const myMember = currentTrip.members.find((m) => m.userId === user?.id);
   const isAdmin  = myMember?.role === 'ADMIN';
   const st       = statusInfo(currentTrip.status);
+
+  const hubLinks: { title: string; subtitle: string; path: string }[] = [
+    {
+      title: '🔗 קישורים והזמנות',
+      subtitle: 'טיסות, מלונות, מסמכים ולינקים',
+      path: `/trip/${id}/links`,
+    },
+    {
+      title: '📖 ציר זמן',
+      subtitle: 'סיפור הטיול והזיכרונות',
+      path: `/trip/${id}/timeline`,
+    },
+  ];
 
   return (
     <AppShell showBottomNav>
@@ -174,6 +200,23 @@ export const TripPage: React.FC = () => {
             {st.label}
           </span>
         </div>
+      </div>
+
+      {/* Quick modules */}
+      <div className="flex flex-col gap-2 mb-4">
+        {hubLinks.map((item) => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path)}
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border border-neutral-200 bg-white hover:border-brand-300 hover:bg-brand-50 transition-colors text-right active:scale-[0.99]"
+          >
+            <div>
+              <p className="text-sm font-semibold text-neutral-800">{item.title}</p>
+              <p className="text-xs text-neutral-400 mt-0.5">{item.subtitle}</p>
+            </div>
+            <span className="text-xs text-brand-500 font-medium flex-shrink-0 mr-2">פתח ←</span>
+          </button>
+        ))}
       </div>
 
       {/* Members */}
@@ -224,25 +267,21 @@ export const TripPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Planner link — desktop only */}
-      <div className="hidden md:block mb-2">
+      {/* Switch trip + profile */}
+      <div className="flex flex-col gap-2 mb-4">
         <button
-          onClick={() => navigate(`/trip/${id}/planner`)}
-          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-brand-300 hover:bg-brand-50 transition-colors text-right"
+          onClick={() => navigate('/', { state: { showDashboard: true } })}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 bg-white text-right active:bg-neutral-50"
         >
-          <span className="text-sm font-medium text-neutral-700">📅 מתכנן הטיול</span>
-          <span className="text-xs text-brand-500 font-medium">פתח ←</span>
+          <span className="text-sm font-medium text-neutral-700">✈️ החלף טיול</span>
+          <span className="text-xs text-brand-500 font-medium">בחר ←</span>
         </button>
-      </div>
-
-      {/* Questionnaire link — all screens */}
-      <div className="mb-4">
         <button
-          onClick={() => navigate(`/trip/${id}/questionnaire`)}
-          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 hover:border-brand-300 hover:bg-brand-50 transition-colors text-right"
+          onClick={() => navigate('/profile')}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 bg-white text-right active:bg-neutral-50"
         >
-          <span className="text-sm font-medium text-neutral-700">🗳️ שאלון הטיול</span>
-          <span className="text-xs text-brand-500 font-medium">הצביעו ←</span>
+          <span className="text-sm font-medium text-neutral-700">👤 הפרופיל שלי</span>
+          <span className="text-xs text-brand-500 font-medium">פתח ←</span>
         </button>
       </div>
 
@@ -251,7 +290,28 @@ export const TripPage: React.FC = () => {
         <div className="mt-2 pt-5 border-t border-neutral-100">
           <p className="text-xs text-neutral-400 mb-3 font-medium">כלי מנהל</p>
 
-          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200">
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 bg-white mb-2">
+            <div className="min-w-0 pr-3">
+              <p className="text-sm text-neutral-700 font-medium">🤖 AI בטיול</p>
+              <p className="text-[11px] text-neutral-400 mt-0.5">סיכומי ציר זמן + התראות חכמות</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAiToggle}
+              disabled={savingAi}
+              className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                currentTrip.aiEnabled !== false ? 'bg-brand-500' : 'bg-neutral-200'
+              } disabled:opacity-50`}
+            >
+              <span
+                className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                  currentTrip.aiEnabled !== false ? 'right-0.5' : 'right-5'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-neutral-200 bg-white">
             <span className="text-sm text-neutral-600">💱 מטבע ברירת מחדל</span>
             <select
               value={currentTrip.defaultCurrency}
@@ -276,7 +336,6 @@ export const TripPage: React.FC = () => {
             <h2 className="text-lg font-bold text-neutral-900 mb-5">עריכת פרטי הטיול</h2>
 
             <div className="flex flex-col gap-4">
-              {/* Name */}
               <div>
                 <label className="text-xs font-bold text-neutral-600 mb-1.5 block">שם הטיול</label>
                 <input
@@ -287,7 +346,6 @@ export const TripPage: React.FC = () => {
                 />
               </div>
 
-              {/* Dates */}
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-xs font-bold text-neutral-600 mb-1.5 block">תאריך יציאה</label>
@@ -309,7 +367,6 @@ export const TripPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Status */}
               <div>
                 <label className="text-xs font-bold text-neutral-600 mb-2 block">סטטוס</label>
                 <div className="grid grid-cols-2 gap-2">

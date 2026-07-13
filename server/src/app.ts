@@ -9,6 +9,12 @@ import geocodeRoutes from './routes/geocode.routes';
 import decisionsRoutes from './routes/decisions.routes';
 import linksRoutes from './routes/links.routes';
 import plannerRoutes from './routes/planner.routes';
+import timelineRoutes from './routes/timeline.routes';
+import weatherRoutes from './routes/weather.routes';
+import flightsRoutes from './routes/flights.routes';
+import assistantRoutes from './routes/assistant.routes';
+import notificationsRoutes from './routes/notifications.routes';
+import subscriptionRoutes from './routes/subscription.routes';
 
 const app = express();
 
@@ -45,6 +51,12 @@ app.use('/api/geocode', geocodeRoutes);
 app.use('/api/decisions', decisionsRoutes);
 app.use('/api/links', linksRoutes);
 app.use('/api/planner', plannerRoutes);
+app.use('/api/timeline', timelineRoutes);
+app.use('/api/weather', weatherRoutes);
+app.use('/api/flights', flightsRoutes);
+app.use('/api/assistant', assistantRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

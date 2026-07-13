@@ -4,6 +4,8 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { findOrCreateTripItem, serializePlace, updateTripItem } from '../lib/tripItems';
+import { timelinePlaceAdded, timelinePhotoUploaded } from '../services/timeline.service';
 
 // ─── GET /api/places/:tripId ──────────────────────────────────────────────────
 export const getPlaces = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -17,11 +19,11 @@ export const getPlaces = async (req: AuthRequest, res: Response): Promise<void> 
 
     const places = await prisma.tripPlace.findMany({
       where: { tripId },
-      include: { photos: { orderBy: { createdAt: 'asc' } } },
+      include: { photos: { orderBy: { createdAt: 'asc' } }, item: true },
       orderBy: { order: 'asc' },
     });
 
-    res.json({ places });
+    res.json({ places: places.map(serializePlace) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בטעינת המקומות' });
@@ -32,7 +34,7 @@ export const getPlaces = async (req: AuthRequest, res: Response): Promise<void> 
 export const addPlace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { tripId } = req.params as { tripId: string };
-    const { name, lat, lng, notes, mapsUrl, date, category } = req.body;
+    const { name, lat, lng, notes, mapsUrl, url, date, category } = req.body;
 
     const member = await prisma.tripMember.findUnique({
       where: { userId_tripId: { userId: req.userId!, tripId } },
@@ -44,13 +46,21 @@ export const addPlace = async (req: AuthRequest, res: Response): Promise<void> =
 
     // מספר סידורי — בסוף הרשימה
     const count = await prisma.tripPlace.count({ where: { tripId } });
+    const item = await findOrCreateTripItem(tripId, { name, lat: Number(lat), lng: Number(lng), description: notes, mapsUrl, url, category }, 'place');
 
     const place = await prisma.tripPlace.create({
-      data: { tripId, name: name.trim(), lat: Number(lat), lng: Number(lng), notes: notes?.trim() || null, mapsUrl: mapsUrl?.trim() || null, date: date?.trim() || null, order: count, category: category?.trim() || 'other' },
-      include: { photos: true },
+      data: { tripId, itemId: item.id, name: item.name, lat: item.lat ?? Number(lat), lng: item.lng ?? Number(lng), notes: notes?.trim() || null, mapsUrl: item.mapsUrl || mapsUrl?.trim() || null, date: date?.trim() || null, order: count, category: category?.trim() || item.category || 'other' },
+      include: { photos: true, item: true },
     });
 
-    res.status(201).json({ place });
+    await timelinePlaceAdded({
+      tripId,
+      userId: req.userId!,
+      placeId: place.id,
+      placeName: place.name,
+    });
+
+    res.status(201).json({ place: serializePlace(place) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בהוספת מקום' });
@@ -61,7 +71,7 @@ export const addPlace = async (req: AuthRequest, res: Response): Promise<void> =
 export const updatePlace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { placeId } = req.params as { placeId: string };
-    const { name, notes, date, category } = req.body;
+    const { name, notes, date, category, mapsUrl, url, lat, lng } = req.body;
 
     const place = await prisma.tripPlace.findUnique({ where: { id: placeId } });
     if (!place) { res.status(404).json({ error: 'מקום לא נמצא' }); return; }
@@ -71,18 +81,23 @@ export const updatePlace = async (req: AuthRequest, res: Response): Promise<void
     });
     if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
 
+    const item = await updateTripItem(place.itemId, place.tripId, { name, description: notes, category, mapsUrl, url, lat, lng }, 'place');
     const updated = await prisma.tripPlace.update({
       where: { id: placeId },
       data: {
-        name: name?.trim() || place.name,
+        itemId: item.id,
+        name: item.name || name?.trim() || place.name,
         notes: notes?.trim() ?? place.notes,
+        mapsUrl: item.mapsUrl ?? place.mapsUrl,
+        lat: item.lat ?? place.lat,
+        lng: item.lng ?? place.lng,
         ...(date !== undefined ? { date: date?.trim() || null } : {}),
-        ...(category !== undefined ? { category: category?.trim() || 'other' } : {}),
+        ...(category !== undefined ? { category: category?.trim() || item.category || 'other' } : {}),
       },
-      include: { photos: true },
+      include: { photos: true, item: true },
     });
 
-    res.json({ place: updated });
+    res.json({ place: serializePlace(updated) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בעדכון מקום' });
@@ -134,6 +149,19 @@ export const addPhoto = async (req: AuthRequest, res: Response): Promise<void> =
     });
     if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
 
+    const { assertCanUpload, recordStorageDelta, LimitError, limitErrorPayload } =
+      await import('../services/limits.service');
+    try {
+      await assertCanUpload(req.userId!, req.file.size || 500_000);
+    } catch (err) {
+      if (err instanceof LimitError) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+        res.status(err.status).json(limitErrorPayload(err));
+        return;
+      }
+      throw err;
+    }
+
     // כיווץ: 1200px רוחב מקסימלי, JPEG 85
     const originalPath = req.file.path;
     const filename     = `${path.basename(req.file.filename, path.extname(req.file.filename))}.jpg`;
@@ -146,10 +174,20 @@ export const addPhoto = async (req: AuthRequest, res: Response): Promise<void> =
       .toFile(outputPath);
 
     if (originalPath !== outputPath) fs.unlinkSync(originalPath);
+    const finalSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : req.file.size;
+    await recordStorageDelta(req.userId!, finalSize);
 
     const caption = (req.body.caption as string | undefined)?.trim() || null;
     const photo = await prisma.placePhoto.create({
       data: { placeId, url: `/uploads/places/${filename}`, caption },
+    });
+
+    await timelinePhotoUploaded({
+      tripId: place.tripId,
+      userId: req.userId!,
+      placeId: place.id,
+      placeName: place.name,
+      photoId: photo.id,
     });
 
     res.status(201).json({ photo });

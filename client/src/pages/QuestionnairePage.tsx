@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
+import { AppShell } from '../components/layout/AppShell';
+import { PlanSubNav } from '../components/layout/PlanSubNav';
 import apiClient from '../api/client';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -15,10 +17,20 @@ const VOTE_OPTIONS = [
 
 type VoteId = typeof VOTE_OPTIONS[number]['id'];
 
-const CAT_ORDER = ['forest', 'munich', 'travel', 'food', 'special'] as const;
+/** Generic category labels — not trip-specific (no מינכן/יער) */
 const CAT_LABELS: Record<string, string> = {
-  forest: 'יער שחור', munich: 'מינכן', travel: 'טיולים', food: 'אוכל', special: 'מיוחד',
+  nature: 'טבע',
+  culture: 'תרבות',
+  activity: 'פעילות',
+  travel: 'נסיעה',
+  food: 'אוכל',
+  special: 'מיוחד',
+  other: 'כללי',
+  // legacy demo ids (if still present on old trips)
+  forest: 'טבע',
+  munich: 'תרבות',
 };
+const CAT_ORDER = ['nature', 'culture', 'activity', 'travel', 'food', 'special', 'other', 'forest', 'munich'] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +43,7 @@ interface Activity {
 interface VoteSummary {
   activityId: string;
   MUST: number; OK: number; IF_OTHERS: number; NOT_REALLY: number; AGAINST: number;
+  voters?: Partial<Record<VoteId, Array<{ id: string; name: string; avatarUrl: string | null }>>>;
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -111,21 +124,27 @@ export const QuestionnairePage: React.FC = () => {
   // ── Loading / empty states ──
 
   if (loading) return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-      <p className="text-neutral-400 text-sm">טוען...</p>
-    </div>
+    <AppShell showBottomNav>
+      <PlanSubNav />
+      <div className="text-center py-12 text-neutral-400 text-sm">טוען...</div>
+    </AppShell>
   );
 
   if (activities.length === 0) return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-8 text-center" dir="rtl">
-      <div className="text-6xl mb-4">📭</div>
-      <h2 className="text-lg font-bold text-neutral-800 mb-2">אין פעילויות עדיין</h2>
-      <p className="text-sm text-neutral-500 mb-6">הוסף פעילויות במתכנן הטיול כדי להתחיל שאלון</p>
-      <button onClick={() => navigate(`/trip/${tripId}/planner`)}
-        className="bg-brand-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm">
-        עבור למתכנן
-      </button>
-    </div>
+    <AppShell showBottomNav>
+      <PlanSubNav />
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="text-6xl mb-4">📭</div>
+        <h2 className="text-lg font-bold text-neutral-800 mb-2">אין פעילויות עדיין</h2>
+        <p className="text-sm text-neutral-500 mb-6">הוסף פעילויות במתכנן הטיול כדי להתחיל שאלון</p>
+        <button
+          onClick={() => navigate(`/trip/${tripId}/plan/schedule`)}
+          className="bg-brand-500 text-white px-6 py-2.5 rounded-xl font-medium text-sm"
+        >
+          עבור ללוח זמנים
+        </button>
+      </div>
+    </AppShell>
   );
 
   const act = unvoted[0];
@@ -139,16 +158,15 @@ export const QuestionnairePage: React.FC = () => {
   const quizDone = view === 'quiz' && unvoted.length === 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-50" dir="rtl">
+    <AppShell showBottomNav>
+      <PlanSubNav />
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-neutral-200 flex-shrink-0">
-        <button onClick={() => navigate(`/trip/${tripId}`)}
-          className="text-sm text-neutral-500 font-medium hover:text-neutral-800">← חזרה</button>
-        <h1 className="font-bold text-neutral-900 text-sm">🗳️ {currentTrip?.name}</h1>
+      {/* Quiz / results toggle */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="font-bold text-neutral-900 text-base">🗳️ הצבעה על פעילויות</h1>
         <div className="flex gap-1">
           <button onClick={startQuiz}
-            className={`relative text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${view === 'quiz' ? 'bg-brand-500 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}>
+            className={`relative text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${view === 'quiz' ? 'bg-brand-500 text-white' : 'text-neutral-600 bg-neutral-100'}`}>
             שאלון
             {unvoted.length > 0 && (
               <span className="absolute -top-1 -left-1 bg-amber-400 text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">
@@ -157,11 +175,13 @@ export const QuestionnairePage: React.FC = () => {
             )}
           </button>
           <button onClick={() => setView('results')}
-            className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${view === 'results' ? 'bg-brand-500 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}>
+            className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${view === 'results' ? 'bg-brand-500 text-white' : 'text-neutral-600 bg-neutral-100'}`}>
             תוצאות
           </button>
         </div>
       </div>
+
+      <div className="flex flex-col flex-1 min-h-0">
 
       {/* Quiz — all done */}
       {quizDone && (
@@ -265,7 +285,8 @@ export const QuestionnairePage: React.FC = () => {
           onVote={handleInlineVote}
         />
       )}
-    </div>
+      </div>
+    </AppShell>
   );
 };
 
@@ -330,8 +351,21 @@ const ResultsView: React.FC<{
     } catch { setAddToMap({ status: 'error' }); setTimeout(() => setAddToMap(null), 3000); }
   };
 
-  const categories = CAT_ORDER.filter(c => activities.some(a => a.category === c));
-  const [tab, setTab] = useState<string>(categories[0] ?? 'forest');
+  // Tabs only for categories that exist in this trip's activities
+  const categories = useMemo(() => {
+    const present = new Set(activities.map(a => a.category).filter(Boolean));
+    const ordered = CAT_ORDER.filter(c => present.has(c));
+    const extras = [...present].filter(c => !ordered.includes(c as typeof CAT_ORDER[number]));
+    return [...ordered, ...extras];
+  }, [activities]);
+  const [tab, setTab] = useState<string>('all');
+  useEffect(() => {
+    if (categories.length === 0) {
+      if (tab !== 'all') setTab('all');
+      return;
+    }
+    if (tab !== 'all' && !categories.includes(tab)) setTab(categories[0]);
+  }, [categories, tab]);
 
   const voteMap = useMemo(
     () => Object.fromEntries(allVotes.map(v => [v.activityId, v])),
@@ -340,7 +374,7 @@ const ResultsView: React.FC<{
 
   const tabActivities = useMemo(() => {
     return activities
-      .filter(a => a.category === tab)
+      .filter(a => tab === 'all' || a.category === tab)
       .map(act => {
         const v = voteMap[act.id] ?? { activityId: act.id, MUST: 0, OK: 0, IF_OTHERS: 0, NOT_REALLY: 0, AGAINST: 0 };
         const total = v.MUST + v.OK + v.IF_OTHERS + v.NOT_REALLY + v.AGAINST;
@@ -373,26 +407,42 @@ const ResultsView: React.FC<{
         </div>
       )}
 
-      {/* Category tabs */}
-      <div className="flex border-b border-neutral-200 bg-white flex-shrink-0 overflow-x-auto">
-        {categories.map(c => {
-          const unvotedInCat = activities.filter(a => a.category === c && myVotes[a.id] === undefined).length;
-          const isActive = tab === c;
-          return (
-            <button key={c} onClick={() => setTab(c)}
-              className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${
-                isActive ? 'border-brand-500 text-brand-600' : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
-              }`}>
-              {CAT_LABELS[c] ?? c}
-              {unvotedInCat > 0 && (
-                <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                  {unvotedInCat}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Category tabs — only when activities exist; hide empty trip-specific leftovers */}
+      {activities.length > 0 && (
+        <div className="flex border-b border-neutral-200 bg-white flex-shrink-0 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setTab('all')}
+            className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${
+              tab === 'all' ? 'border-brand-500 text-brand-600' : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
+            }`}
+          >
+            הכל
+            {unvotedCount > 0 && (
+              <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {unvotedCount}
+              </span>
+            )}
+          </button>
+          {categories.map(c => {
+            const unvotedInCat = activities.filter(a => a.category === c && myVotes[a.id] === undefined).length;
+            const isActive = tab === c;
+            return (
+              <button key={c} type="button" onClick={() => setTab(c)}
+                className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors ${
+                  isActive ? 'border-brand-500 text-brand-600' : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50'
+                }`}>
+                {CAT_LABELS[c] ?? c}
+                {unvotedInCat > 0 && (
+                  <span className="bg-amber-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {unvotedInCat}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add-to-map banner */}
       {addToMap && (
@@ -471,14 +521,34 @@ const ResultsView: React.FC<{
                       {VOTE_OPTIONS.map(opt => {
                         const count = v[opt.id] ?? 0;
                         if (count === 0) return null;
+                        const voters = v.voters?.[opt.id] ?? [];
                         return (
-                          <div key={opt.id} className="flex items-center gap-2">
-                            <span className="text-xs w-4 flex-shrink-0">{opt.emoji}</span>
-                            <div className="flex-1 h-4 bg-neutral-100 rounded-full overflow-hidden">
-                              <div className={`h-full ${opt.bar} rounded-full transition-all duration-500`}
-                                style={{ width: `${(count / total) * 100}%` }} />
+                          <div key={opt.id} className="flex items-start gap-2">
+                            <span className="text-xs w-4 flex-shrink-0 pt-0.5">{opt.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="h-4 bg-neutral-100 rounded-full overflow-hidden">
+                                <div className={`h-full ${opt.bar} rounded-full transition-all duration-500`}
+                                  style={{ width: `${(count / total) * 100}%` }} />
+                              </div>
+                              {voters.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {voters.map(user => (
+                                    <span key={user.id}
+                                      className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 bg-neutral-50 border border-neutral-200 rounded-full text-[10px] font-medium text-neutral-600">
+                                      {user.avatarUrl ? (
+                                        <img src={user.avatarUrl} alt="" className="w-3.5 h-3.5 rounded-full object-cover flex-shrink-0" />
+                                      ) : (
+                                        <span className="w-3.5 h-3.5 rounded-full bg-neutral-300 text-white text-[8px] flex items-center justify-center flex-shrink-0">
+                                          {user.name.trim().charAt(0) || '?'}
+                                        </span>
+                                      )}
+                                      <span className="truncate">{user.name}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <span className="text-xs font-semibold text-neutral-600 w-3 text-left">{count}</span>
+                            <span className="text-xs font-semibold text-neutral-600 w-3 text-left pt-0.5">{count}</span>
                           </div>
                         );
                       })}

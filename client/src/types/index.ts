@@ -1,8 +1,57 @@
+export type PlanTier = 'FREE' | 'PRO' | 'BUSINESS';
+
 export interface User {
   id: string;
   name: string;
   email: string;
   avatarUrl?: string | null;
+  /** Personal AI preference for timeline + notifications */
+  aiEnabled?: boolean;
+  plan?: PlanTier;
+  planExpiresAt?: string | null;
+  storageBytesUsed?: number;
+}
+
+export interface SubscriptionSnapshot {
+  plan: {
+    id: PlanTier;
+    nameHe: string;
+    expiresAt: string | null;
+    limits: {
+      maxTrips: number;
+      maxMembersPerTrip: number;
+      maxAiCallsPerMonth: number;
+      maxStorageBytes: number;
+      aiIncluded: boolean;
+    };
+  };
+  usage: {
+    period: string;
+    trips: number;
+    aiCalls: number;
+    storageBytes: number;
+  };
+  remaining: {
+    trips: number;
+    aiCalls: number;
+    storageBytes: number;
+  };
+  formatted: {
+    storageUsed: string;
+    storageLimit: string;
+    storageRemaining: string;
+  };
+  preference: { aiEnabled: boolean };
+  catalog: Array<{
+    id: PlanTier;
+    nameHe: string;
+    maxTrips: number;
+    maxMembersPerTrip: number;
+    maxAiCallsPerMonth: number;
+    maxStorageBytes: number;
+    maxStorageLabel: string;
+    aiIncluded: boolean;
+  }>;
 }
 
 export interface Trip {
@@ -14,8 +63,25 @@ export interface Trip {
   inviteCode: string;
   defaultCurrency: string;
   ownerId: string;
+  /** Trip-level AI switch (admin) */
+  aiEnabled?: boolean;
   createdAt: string;
   members: TripMember[];
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  tripId?: string | null;
+  type: string;
+  title: string;
+  body?: string | null;
+  emoji: string;
+  href?: string | null;
+  isRead: boolean;
+  aiGenerated: boolean;
+  createdAt: string;
+  trip?: { id: string; name: string } | null;
 }
 
 export type TripStatus = 'PLAN' | 'LIVE' | 'FINISHED' | 'CANCELED';

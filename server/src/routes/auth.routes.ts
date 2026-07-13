@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { register, login, getMe, updateProfile, uploadAvatar } from '../controllers/auth.controller';
+import { register, login, getMe, updateProfile, uploadAvatar, registerBiometric, loginBiometric } from '../controllers/auth.controller';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -26,6 +26,8 @@ const upload = multer({
 
 router.post('/register', register);
 router.post('/login', login);
+router.post('/biometric/register', authenticateToken, registerBiometric);
+router.post('/biometric/login', loginBiometric);
 router.get('/me', authenticateToken, getMe);
 router.put('/profile', authenticateToken, updateProfile);
 router.post('/profile/avatar', authenticateToken, upload.single('avatar'), uploadAvatar);

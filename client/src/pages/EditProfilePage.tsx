@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/authStore';
 
 export const EditProfilePage: React.FC = () => {
-  const { user, updateProfile, uploadAvatar } = useAuthStore();
+  const { user, updateProfile, uploadAvatar, registerBiometric, isBiometricAvailable, hasSavedBiometric } = useAuthStore();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -16,6 +16,8 @@ export const EditProfilePage: React.FC = () => {
   const [saving,     setSaving]     = useState(false);
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState(false);
+  const [biometricRegistering, setBiometricRegistering] = useState(false);
+  const [biometricSuccess, setBiometricSuccess] = useState(false);
 
   // ─── בחירת תמונה ───────────────────────────────────────────────────────────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,13 +45,27 @@ export const EditProfilePage: React.FC = () => {
     setError('');
     setSaving(true);
     try {
-      await updateProfile(name.trim());
+      await updateProfile({ name: name.trim() });
       setSuccess(true);
       setTimeout(() => navigate('/profile'), 900);
     } catch {
       setError('שגיאה בשמירת הפרופיל');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ─── רישום ביומטרי ─────────────────────────────────────────────────────────
+  const handleRegisterBiometric = async () => {
+    setError('');
+    setBiometricRegistering(true);
+    try {
+      await registerBiometric();
+      setBiometricSuccess(true);
+    } catch (err: any) {
+      setError(err?.message || 'שגיאה ברישום ביומטרי');
+    } finally {
+      setBiometricRegistering(false);
     }
   };
 
@@ -174,6 +190,44 @@ export const EditProfilePage: React.FC = () => {
           שמור שינויים
         </Button>
       </form>
+
+      {/* הגדרת התחברות ביומטרית */}
+      {isBiometricAvailable() && (
+        <Card className="p-5 mt-4">
+          <h3 className="text-base font-semibold text-neutral-900 mb-2">התחברות ביומטרית</h3>
+          <p className="text-sm text-neutral-600 mb-4">
+            {hasSavedBiometric()
+              ? 'התחברות ביומטרית מופעלת במכשיר זה'
+              : 'הפעל התחברות מהירה באמצעות Face ID, Touch ID או טביעת אצבע'}
+          </p>
+
+          {biometricSuccess && (
+            <p className="text-sm text-green-600 mb-3 font-medium">✅ התחברות ביומטרית הופעלה בהצלחה!</p>
+          )}
+
+          {!hasSavedBiometric() && (
+            <Button
+              onClick={handleRegisterBiometric}
+              size="md"
+              variant="secondary"
+              loading={biometricRegistering}
+              className="w-full"
+            >
+              <span className="flex items-center justify-center gap-2">
+                <span>🔐</span>
+                הפעל התחברות ביומטרית
+              </span>
+            </Button>
+          )}
+
+          {hasSavedBiometric() && (
+            <div className="flex items-center gap-2 text-sm text-neutral-500">
+              <span className="text-green-500">✓</span>
+              <span>התחברות ביומטרית זמינה</span>
+            </div>
+          )}
+        </Card>
+      )}
     </AppShell>
   );
 };

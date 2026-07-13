@@ -13,7 +13,28 @@ export default defineConfig({
         clientsClaim: true,     // לוקח שליטה על כל הtabs מיד
         // אל תשמור cache על HTML — תמיד טען מהרשת
         navigateFallbackDenylist: [/^\/uploads\//],
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            // API reads — network first, fallback to cache when offline
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'tripo-api',
+              networkTimeoutSeconds: 8,
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/uploads/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'tripo-uploads',
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'TRIPO',

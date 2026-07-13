@@ -112,6 +112,7 @@ export const ExpensesPage: React.FC = () => {
     if (!repayTarget || !tripId) return;
     const amt = parseFloat(repayAmount);
     if (!amt || amt <= 0) return;
+    // Server: from = pays (debtor), to = receives (creditor)
     setRepaying(true);
     try {
       await apiClient.post(`/api/expenses/${tripId}`, {
@@ -149,7 +150,7 @@ export const ExpensesPage: React.FC = () => {
 
       {/* Header */}
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-neutral-900">💸 הוצאות</h1>
+        <h1 className="text-2xl font-bold text-neutral-900">💸 כסף</h1>
       </div>
 
       {/* Tabs */}
@@ -336,17 +337,23 @@ export const ExpensesPage: React.FC = () => {
                 onClick={() => { setRepayTarget(s); setRepayAmount(String(s.amountILS)); }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
+                    {/*
+                      from = pays, to = receives.
+                      RTL flex: first item is on the RIGHT (read first) = payer.
+                      Arrow ← points left toward the receiver.
+                      Read right→left:  Aviram ← Dor  (Aviram pays Dor)
+                    */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-neutral-900">{s.from.name}</span>
-                      <span className="text-neutral-400 text-sm">←</span>
+                      <span className="font-semibold text-brand-600">{s.from.name}</span>
+                      <span className="text-neutral-400 text-lg font-bold leading-none" aria-hidden>←</span>
                       <span className="font-semibold text-neutral-900">{s.to.name}</span>
                     </div>
                     <p className="text-xs text-neutral-500 mt-0.5">לחץ לסילוק חוב</p>
                   </div>
-                  <div className="text-left flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <div className="font-bold text-lg text-brand-600">{fmtILS(s.amountILS)}</div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-neutral-300">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-neutral-300 -scale-x-100">
                       <polyline points="9 18 15 12 9 6"/>
                     </svg>
                   </div>
@@ -374,8 +381,10 @@ export const ExpensesPage: React.FC = () => {
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-bold text-lg mb-1">סילוק חוב</h3>
-            <p className="text-sm text-neutral-500 mb-4">
-              {repayTarget.from.name} משלם ל{repayTarget.to.name}
+            <p className="text-sm text-neutral-500 mb-4 flex items-center gap-2 justify-center">
+              <span className="font-semibold text-brand-600">{repayTarget.from.name}</span>
+              <span className="text-neutral-400 font-bold" aria-hidden>←</span>
+              <span className="font-semibold text-neutral-800">{repayTarget.to.name}</span>
             </p>
             <div className="flex items-center border border-neutral-200 rounded-xl overflow-hidden mb-4 focus-within:border-brand-500">
               <span className="px-4 text-neutral-500 text-sm bg-neutral-50 h-12 flex items-center border-l border-neutral-200">₪</span>

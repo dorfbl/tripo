@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
+import { AppShell } from '../components/layout/AppShell';
+import { PlanSubNav } from '../components/layout/PlanSubNav';
 import apiClient from '../api/client';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -33,15 +35,16 @@ const fmtDur = (mins: number) => {
 const fmtDate = (iso: string) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' });
 
-// ─── Categories & Colors ──────────────────────────────────────────────────────
+// ─── Categories & Colors (generic — not trip-specific) ───────────────────────
 
 const CATS = [
-  { id: 'forest',  label: '🌲 יער',   color: 'green'  },
-  { id: 'munich',  label: '🏙️ מינכן', color: 'blue'   },
-  { id: 'travel',  label: '🚐 נסיעה', color: 'yellow' },
-  { id: 'food',    label: '🍽️ אוכל',  color: 'orange' },
-  { id: 'special', label: '⭐ מיוחד', color: 'red'    },
-  { id: 'other',   label: '📌 כללי',  color: 'gray'   },
+  { id: 'nature',   label: '🌲 טבע',     color: 'green'  },
+  { id: 'culture',  label: '🏛️ תרבות',   color: 'blue'   },
+  { id: 'activity', label: '🎯 פעילות',  color: 'purple' },
+  { id: 'food',     label: '🍽️ אוכל',    color: 'orange' },
+  { id: 'travel',   label: '🚐 נסיעה',   color: 'yellow' },
+  { id: 'special',  label: '⭐ מיוחד',   color: 'red'    },
+  { id: 'other',    label: '📌 כללי',    color: 'gray'   },
 ];
 
 const COLORS: Record<string, { pill: string; event: string; border: string; text: string }> = {
@@ -54,116 +57,180 @@ const COLORS: Record<string, { pill: string; event: string; border: string; text
   gray:   { pill:'bg-neutral-100 text-neutral-600',event:'bg-neutral-200 border-neutral-300',border:'border-neutral-300',text:'text-neutral-700'},
 };
 
+const catLabel = (id: string) => CATS.find(c => c.id === id)?.label ?? id;
 const catColor = (cat: string) => CATS.find(c => c.id === cat)?.color ?? 'gray';
 const col = (color: string) => COLORS[color] ?? COLORS.gray;
 const mapPlaceCategory = (cat?: string) => {
   switch (cat) {
+    case 'nature':
     case 'forest': return 'nature';
     case 'food': return 'restaurant';
     case 'travel': return 'transport';
+    case 'culture':
     case 'munich': return 'culture';
+    case 'activity':
     case 'special': return 'activity';
     default: return 'other';
   }
 };
 
-// ─── Template Activities (from trip planning HTML) ─────────────────────────────
+// ─── Modern mono icons (soft stroke, Lucide-like) ────────────────────────────
 
-const TEMPLATES = [
-  // ══ 🌲 יער שחור ══
-  { emoji:'🏞️', name:'Ravenna Gorge', location:'Hinterzarten', description:'הגיא הדרמטי של יין שחור — מסלול הליכה ~8.8 ק"מ לאורך נחל Ravenna עם גשרי עץ תלויים בגובה 68 מ\' מעל הגיא. לאורך הדרך: מפלים מרהיבים, צמחיה עשירה וצפיות ביער. מסלול קל-בינוני המתאים לכולם. הגיעו לפני 9:00 בבוקר — אחר כך הוא מתמלא.', durationMins:210, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Ravenna+Gorge+Hinterzarten+Germany' },
-  { emoji:'🏔️', name:'Feldberg – פסגה + גונדולה', location:'20 דק\' מ-Hinterzarten', description:'הנקודה הגבוהה ביותר ביער (1,493מ\') | נוף לאלפים', durationMins:150, cost:'~€15', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Feldberg+Black+Forest+Germany' },
-  { emoji:'⛰️', name:'Belchen – פנורמה 360°', location:'35 דק\' מ-Hinterzarten', description:'גונדולה + הליכה קצרה | נוף הכי יפה ביער', durationMins:150, cost:'~€14', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Belchen+Black+Forest+Germany' },
-  { emoji:'🌊', name:'אגם Schluchsee', location:'15 דק\' מ-Hinterzarten', description:'האגם הגדול ביותר ביער | שלווה, סירות, הליכה', durationMins:120, cost:'חינם / €12', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Schluchsee+Germany' },
-  { emoji:'⛵', name:'אגם Titisee', location:'10 דק\' מ-Hinterzarten', description:'הגלציאלי הציורי ביותר | טיול 90 דק\' + סירות', durationMins:150, cost:'חינם / €12', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Titisee+Germany' },
-  { emoji:'🛷', name:'מגלשת Hasenhorn', location:'Todtnau', description:'2,900 מ\' מגלשת קיץ + כיסא מעופף | נוף מרהיב', durationMins:120, cost:'~€12', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Hasenhorn+Coaster+Todtnau+Germany' },
-  { emoji:'💧', name:'מפלי Triberg + שעון קוקייה', location:'35 דק\' מ-Hinterzarten', description:'163 מ\' / 7 מפלים | הגדולים בגרמניה', durationMins:150, cost:'€5', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Triberg+Waterfalls+Germany' },
-  { emoji:'♨️', name:'Caracalla Therme Baden-Baden', location:'45 דק\'', description:'מרחצאות תרמיים רומאיים | ספא מושלם', durationMins:180, cost:'€25–30', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Caracalla+Therme+Baden-Baden+Germany' },
-  { emoji:'🏙️', name:'Freiburg im Breisgau', location:'35 דק\'', description:'קתדרלה + שוק + תעלות רחוב | עיר יפה', durationMins:240, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Freiburg+im+Breisgau+Germany' },
-  { emoji:'⛪', name:'Sankt Blasien – כיפה ענקית', location:'30 דק\'', description:'קתדרלה בסגנון פנתיאון רומאי', durationMins:90, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Sankt+Blasien+Cathedral+Germany' },
-  { emoji:'🎿', name:'Mehliskopf Alpine Coaster', location:'50 דק\'', description:'מגלשת אלפינה קצרה ומהנה', durationMins:90, cost:'€4/רידה', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Mehliskopf+Alpine+Coaster+Germany' },
-  { emoji:'🏝️', name:'Lindau – אי על הבודנזה', location:'~1.5 שעות נסיעה', description:'אי קסום | נמל ציורי | נוף לאלפים', durationMins:180, cost:'חינם', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Lindau+Bodensee+Germany' },
-  { emoji:'🏰', name:'טירת Neuschwanstein', location:'~2 שעות נסיעה', description:'טירת דיסני המקורית | הזמינו כרטיסים מראש!', durationMins:240, cost:'€13', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Neuschwanstein+Castle+Germany' },
-  { emoji:'🏛️', name:'Augsburg – Fuggerei', location:'~2 שעות נסיעה', description:'שכונת עניים מ-1516 שעדיין פעילה', durationMins:180, cost:'€4', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Fuggerei+Augsburg+Germany' },
-  { emoji:'🌊', name:'אגם Starnberg', location:'30 דק\' מ-מינכן', description:'ציורי | מקום מותו של לודוויג ה-II', durationMins:120, cost:'חינם', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Starnberger+See+Germany' },
-  { emoji:'🔔', name:'Marienplatz + Glockenspiel', location:'מרכז מינכן', description:'לב מינכן | Glockenspiel ב-11:00', durationMins:90, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Marienplatz+Munich+Germany' },
-  { emoji:'🚗', name:'BMW Welt + Museum', location:'U3 Olympiazentrum', description:'מוזיאון מרשים בחינם | ליד האצטדיון האולימפי', durationMins:150, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=BMW+Welt+Munich+Germany' },
-  { emoji:'🏛️', name:'Deutsches Museum', location:'ליד נהר Isar', description:'הגדול בעולם למדע וטכנולוגיה | מטוסים, רכבות, חלל', durationMins:180, cost:'€14', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Deutsches+Museum+Munich+Germany' },
-  { emoji:'🌳', name:'English Garden + Eisbachwelle', location:'מינכן', description:'פארק ענק + גלישת גלים בלב העיר', durationMins:120, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=English+Garden+Munich+Germany' },
-  { emoji:'🏎️', name:'F1 Simulator', location:'Race Experience Munich', description:'סימולטור מקצועי | הזמינו מראש!', durationMins:90, cost:'~€60', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Race+Experience+Munich+Germany' },
-  { emoji:'🏁', name:'קארטינג – Go-Kart Welt', location:'Aschheim', description:'קארטינג מהיר | ~20 דק\' מהמרכז', durationMins:90, cost:'~€30', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Go+Kart+Welt+Aschheim+Germany' },
-  { emoji:'🔐', name:'חדר בריחה – Exit the Room', location:'מרכז מינכן', description:'60 דק\' לשחק + 15 דק\' הכנה | ל-5–6 שחקנים', durationMins:75, cost:'~€25', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Exit+the+Room+Munich+Germany' },
-  { emoji:'🏭', name:'Paulaner Brewery Tour', location:'מינכן', description:'סיור מבשלה + טעימות בירה | הזמינו מראש', durationMins:120, cost:'~€25', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Paulaner+Brauerei+Munich+Germany' },
-  { emoji:'🏟️', name:'Olympiapark Munich', location:'מינכן צפון', description:'אצטדיון 1972 + מגדל תצפית | ליד BMW Welt', durationMins:90, cost:'חינם / €9', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Olympiapark+Munich+Germany' },
-  { emoji:'⚽', name:'משחק באיירן מינכן', location:'Allianz Arena', description:'בדקו לוח 26/27 | fcbayern.com', durationMins:180, cost:'€40–100', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Allianz+Arena+Munich+Germany' },
-  { emoji:'🛒', name:'Viktualienmarkt – שוק', location:'מרכז מינכן', description:'שוק איכרים | ארוחת בוקר / צהריים מעולה', durationMins:60, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Viktualienmarkt+Munich+Germany' },
-  { emoji:'🍺', name:'Hofbräuhaus', location:'מרכז מינכן', description:'האייקון של מינכן | חובה לפחות פעם אחת', durationMins:90, cost:'€25–35', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Hofbrauhaus+Munich+Germany' },
-  { emoji:'🌾', name:'Augustiner Bräustuben', location:'מינכן', description:'הבירה הטובה ביותר לפי מקומיים', durationMins:90, cost:'€30–40', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Augustiner+Braustuben+Munich+Germany' },
-  { emoji:'🥩', name:'Zum Franziskaner', location:'מינכן', description:'מסעדה בוורסטית מ-1363! | שניצל + כנפליים', durationMins:90, cost:'€35–45', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Zum+Franziskaner+Munich+Germany' },
-  { emoji:'⭐', name:'Tantris – פינה-דיינינג', location:'מינכן', description:'ארוחת פרידה מושקעת | הזמינו 2+ חודשים מראש!', durationMins:150, cost:'€80–120', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Tantris+Munich+Germany' },
-  { emoji:'🦌', name:'Landgasthof Hirschen', location:'Hinterzarten', description:'ארוחת ערב מסורתית ביער | ציד, פטריות, שחור-יער', durationMins:90, cost:'€30–40', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Landgasthof+Hirschen+Hinterzarten' },
-  { emoji:'🌅', name:'מסעדה על שפת Titisee', location:'Titisee', description:'ארוחה עם נוף לאגם ולהרים', durationMins:75, cost:'€30–40', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Restaurant+Titisee+Germany' },
-  { emoji:'🎢', name:'Europa Park', location:'Rust, 30 דק\'', description:'פארק שעשועים מהגדולים באירופה | 100+ אטרקציות', durationMins:540, cost:'€76', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Europa+Park+Rust+Germany' },
-  { emoji:'👻', name:'Traumatica Halloween Event', location:'Europa Park', description:'אירוע האלווין | בתי רדופים + מופעים | 19:00–23:30', durationMins:270, cost:'€40', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Europa+Park+Rust+Germany' },
-  { emoji:'🌊', name:'Rulantica Waterpark', location:'Rust, 30 דק\'', description:'פארק המים הגדול ביותר בגרמניה שנפתח ב-2019, בבעלות Europa-Park. 17 מגלשות מי מרהיבות, מתחם גלים ענק, מגלשת רוקט-מי בגובה 4 קומות ואזור ילדים. מומלץ לרכוש כרטיסים משולבים עם Europa-Park ולהגיע מיד עם הפתיחה ב-9:00 — הפארק מתמלא מהר בקיץ!', durationMins:360, cost:'€40–50', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Rulantica+Waterpark+Rust+Germany' },
+type IconName =
+  | 'link'
+  | 'map'
+  | 'pin'
+  | 'edit'
+  | 'trash'
+  | 'undo'
+  | 'paperclip'
+  | 'clock'
+  | 'external'
+  | 'image'
+  | 'file'
+  | 'alert'
+  | 'close';
 
-  // ── יער שחור — עוד ──
-  { emoji:'🚠', name:'Schauinsland Gondola', location:'Oberried, 25 דק\'', description:'גונדולה עם נוף מרהיב ליער + נתיב הליכה בפסגה | 1,284 מ\'', durationMins:120, cost:'~€15', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Schauinsland+Seilbahn+Freiburg+Germany' },
-  { emoji:'🏔️', name:'Mummelsee – האגם הסגנדרי', location:'Seebach, 50 דק\'', description:'אגם הרים מסתורי בגובה 1,036 מ\' | פסל אגדות + הליכות', durationMins:90, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Mummelsee+Black+Forest+Germany' },
-  { emoji:'🌊', name:'Wutach Gorge', location:'55 דק\' מ-Hinterzarten', description:'גיא פרא ומלהיב | 13 ק"מ הליכה | שמורת טבע נדירה', durationMins:240, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Wutachschlucht+Germany' },
-  { emoji:'🍷', name:'Staufen im Breisgau', location:'30 דק\'', description:'עיירת יין קסומה | שמורת יין בדן | כיכר ימי-ביניימית', durationMins:120, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Staufen+im+Breisgau+Germany' },
-  { emoji:'🎑', name:'Sasbachwalden – כפר יין', location:'50 דק\' מ-Hinterzarten', description:'כפר בבוורי ציורי ביותר | שבילי יין + נוף הרים', durationMins:150, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Sasbachwalden+Germany' },
-  { emoji:'🌿', name:'Höllental Valley Drive', location:'10 דק\' מ-Hinterzarten', description:'נסיעה בוואדי הדרמטי ביין שחור | "עמק הגיהינום" | גשר מרהיב', durationMins:60, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Hollental+Valley+Black+Forest' },
-  { emoji:'⛷️', name:'Todtnau Ski Area', location:'Todtnau, 20 דק\'', description:'אזור גלישה חורפי | קיץ: אופני הרים + הליכות | נוף נהדר', durationMins:180, cost:'~€20', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Todtnau+Ski+Resort+Germany' },
-  { emoji:'⌚', name:'Furtwangen Clock Museum', location:'Furtwangen, 45 דק\'', description:'מוזיאון שעוני קוקייה | ההיסטוריה של שעוני יער שחור', durationMins:120, cost:'€8', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Deutsches+Uhrenmuseum+Furtwangen+Germany' },
-  { emoji:'🌄', name:'Kandel Mountain – 1,241 מ\'', location:'50 דק\' מ-Hinterzarten', description:'הליכה קצרה לפסגה | מגדל תצפית | נוף 360° ליין שחור', durationMins:150, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Kandel+Black+Forest+Germany' },
-  { emoji:'🏞️', name:'Windgfällweiher Lake', location:'5 דק\' מ-Hinterzarten', description:'אגם בלב היער | שחייה טבעית | שלווה מוחלטת', durationMins:90, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Windgfallweiher+Hinterzarten+Germany' },
-  { emoji:'🧖', name:'Aqua Titisee Spa', location:'Titisee, 10 דק\'', description:'ספא ואקווה-פארק | מגלשות + סאונה + בריכות חוץ | אטרקציה משפחתית', durationMins:180, cost:'~€20', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Aqua+Titisee+Germany' },
-  { emoji:'🚴', name:'E-Bike Tour ביין שחור', location:'Hinterzarten', description:'השכרת אופניים חשמליים | מסלול יערי | ~20-30 ק"מ', durationMins:180, cost:'~€30', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=E-Bike+Rental+Hinterzarten+Germany' },
-  { emoji:'🌲', name:'Bärenschlucht Hiking', location:'Bühlertal, 40 דק\'', description:'גיא דובים | גשרי עץ + מפלים קטנים | ~4 ק"מ הלוך-חזור', durationMins:150, cost:'חינם', category:'forest', color:'green', mapsUrl:'https://maps.google.com/?q=Barenschlucht+Germany' },
+/** Smooth single-color outline icons */
+const Icon: React.FC<{ name: IconName; className?: string; size?: number }> = ({
+  name,
+  className = '',
+  size = 15,
+}) => {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: `flex-shrink-0 ${className}`,
+    'aria-hidden': true as const,
+  };
 
-  // ── מינכן — עוד ──
-  { emoji:'🏰', name:'Nymphenburg Palace', location:'מינכן מערב', description:'ארמון הקיץ הבוורי המפואר | גנים ענקיים + מוזיאון כרכרות', durationMins:180, cost:'€8', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Nymphenburg+Palace+Munich+Germany' },
-  { emoji:'🎨', name:'Pinakothek der Moderne', location:'מינכן מרכז', description:'ארבעה מוזיאונים באחד | אמנות מודרנית + דיזיין + גרפיקה', durationMins:150, cost:'€10', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Pinakothek+der+Moderne+Munich+Germany' },
-  { emoji:'🏛️', name:'Residenz Munich', location:'מרכז מינכן', description:'הארמון המלכותי הגדול ביותר בגרמניה | 130 חדרים | אוצרות מינכן', durationMins:150, cost:'€9', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Munich+Residenz+Germany' },
-  { emoji:'⚽', name:'FC Bayern Museum', location:'Allianz Arena', description:'מוזיאון ה-FC Bayern | גביעים + הלבשה + היסטוריה של הקלוב', durationMins:90, cost:'€12', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=FC+Bayern+Museum+Munich+Germany' },
-  { emoji:'🐘', name:'Hellabrunn Zoo Munich', location:'מינכן דרום', description:'גן חיות גיאוגרפי ראשון בעולם | 750 מינים | כולל קיווי', durationMins:240, cost:'€18', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Tierpark+Hellabrunn+Munich+Germany' },
-  { emoji:'🌊', name:'Sea Life Munich', location:'מינכן', description:'אקווריום | מנהרת כרישים + פינגווינים | טוב למשפחות', durationMins:120, cost:'~€20', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Sea+Life+Munich+Germany' },
-  { emoji:'🗼', name:'Olympia Tower – Observation Deck', location:'Olympiapark', description:'תצפית בגובה 190 מ\' + מסעדה מסתובבת | ליד BMW Welt', durationMins:90, cost:'€9', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Olympiaturm+Munich+Germany' },
-  { emoji:'🌿', name:'Hofgarten + Residenzstrasse', description:'גן ארמוני קלאסי במרכז | קפה + ריצה + שבתות שוחדות', durationMins:60, cost:'חינם', location:'מרכז מינכן', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Hofgarten+Munich+Germany' },
-  { emoji:'🚲', name:'Isar River Cycling Path', location:'מינכן', description:'אחת הציפות הטובות | נהר Isar + פארקים ירוקים | ~20 ק"מ', durationMins:150, cost:'~€15 השכרה', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Isar+River+Cycling+Munich+Germany' },
-  { emoji:'🎪', name:'Munich Night Guided Tour', location:'מרכז מינכן', description:'סיור לילי עם מדריך עברי/אנגלי | מרינן-פלאץ + ביירגרטן', durationMins:150, cost:'~€25', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Munich+Old+Town+Night+Tour' },
-  { emoji:'🏘️', name:'Schwabing Neighborhood Walk', location:'מינכן צפון', description:'רובע בוהמי | גלריות + קפה + חנויות ויינטג\' + חיי לילה', durationMins:120, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Schwabing+Munich+Germany' },
-  { emoji:'⛪', name:'Asam Church', location:'מינכן מרכז', description:'ברוק בוורי מטורף | בניין פרטי שהפך לכנסיה | חינמי', durationMins:30, cost:'חינם', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Asamkirche+Munich+Germany' },
-  { emoji:'🚣', name:'Paddle Boats – Olympiasee', location:'Olympiapark', description:'סירות פדלים על האגם ליד האצטדיון | רגוע ומהנה', durationMins:60, cost:'~€10', category:'munich', color:'blue', mapsUrl:'https://maps.google.com/?q=Olympiasee+Munich+Germany' },
+  // Paths tuned for a softer, more modern silhouette
+  switch (name) {
+    case 'link':
+      return (
+        <svg {...common}>
+          <path d="M9.5 14.5a4.2 4.2 0 006 0l2.3-2.3a4.2 4.2 0 10-6-6L10.5 7.5" />
+          <path d="M14.5 9.5a4.2 4.2 0 00-6 0L6.2 11.8a4.2 4.2 0 106 6l1.3-1.3" />
+        </svg>
+      );
+    case 'map':
+      return (
+        <svg {...common}>
+          <path d="M9 4.5l6 2.2 5.5-2.2v14.5l-5.5 2.2L9 19 3.5 21.2V6.7L9 4.5z" />
+          <path d="M9 4.5v14.5M15 6.7v14.5" />
+        </svg>
+      );
+    case 'pin':
+      return (
+        <svg {...common}>
+          <path d="M12 21s6.5-5.4 6.5-10.2A6.5 6.5 0 0012 4.3a6.5 6.5 0 00-6.5 6.5C5.5 15.6 12 21 12 21z" />
+          <circle cx="12" cy="10.8" r="2.1" />
+        </svg>
+      );
+    case 'edit':
+      return (
+        <svg {...common}>
+          <path d="M4 20h4l11-11a2.1 2.1 0 00-3-3L5 17v3z" />
+          <path d="M13.5 6.5l3 3" />
+        </svg>
+      );
+    case 'trash':
+      return (
+        <svg {...common}>
+          <path d="M4.5 7h15" />
+          <path d="M9.5 7V5.2A1.2 1.2 0 0110.7 4h2.6a1.2 1.2 0 011.2 1.2V7" />
+          <path d="M18.2 7l-.7 11.2a2 2 0 01-2 1.8H8.5a2 2 0 01-2-1.8L5.8 7" />
+          <path d="M10 11v5.5M14 11v5.5" />
+        </svg>
+      );
+    case 'undo':
+      return (
+        <svg {...common}>
+          <path d="M8 13l-3.5-3.5L8 6" />
+          <path d="M4.5 9.5H14a5 5 0 010 10h-3.5" />
+        </svg>
+      );
+    case 'paperclip':
+      return (
+        <svg {...common}>
+          <path d="M8.5 12.5l6.4-6.4a2.6 2.6 0 113.7 3.7l-8.1 8.1a4.2 4.2 0 11-5.9-5.9l7.6-7.6" />
+        </svg>
+      );
+    case 'clock':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.25" />
+          <path d="M12 7.8V12l2.8 1.8" />
+        </svg>
+      );
+    case 'external':
+      return (
+        <svg {...common}>
+          <path d="M14 5h5v5" />
+          <path d="M10 14L19 5" />
+          <path d="M18 13.5V18a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 18V7A1.5 1.5 0 015.5 5.5H10" />
+        </svg>
+      );
+    case 'image':
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+          <circle cx="9" cy="10.2" r="1.4" />
+          <path d="M3.8 16.2l4.6-3.6 3.2 2.5 3.4-4.2 5 5.1" />
+        </svg>
+      );
+    case 'file':
+      return (
+        <svg {...common}>
+          <path d="M13.5 3.5H8A2.5 2.5 0 005.5 6v12A2.5 2.5 0 008 20.5h8A2.5 2.5 0 0018.5 18V8.5L13.5 3.5z" />
+          <path d="M13.5 3.5V8.5h5" />
+        </svg>
+      );
+    case 'alert':
+      return (
+        <svg {...common}>
+          <path d="M12 9.2v4.2" />
+          <path d="M12 16.6h.01" />
+          <path d="M10.55 4.9L3.1 17.6a1.8 1.8 0 001.55 2.7h14.7a1.8 1.8 0 001.55-2.7L13.45 4.9a1.8 1.8 0 00-2.9 0z" />
+        </svg>
+      );
+    case 'close':
+      return (
+        <svg {...common}>
+          <path d="M7 7l10 10M17 7L7 17" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
 
-  // ── טיולים — עוד ──
-  { emoji:'🏔️', name:'Zugspitze – גג גרמניה', location:'~1.5 שעות מ-מינכן', description:'הנקודה הגבוהה ביותר בגרמניה (2,962 מ\') | רכבל + שלג כל השנה', durationMins:360, cost:'€65', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Zugspitze+Germany' },
-  { emoji:'🎿', name:'Garmisch-Partenkirchen', location:'~1.5 שעות מ-מינכן', description:'עיירת אלפים ציורית | קניית גלידה + הליכות + קבלת פנים אלפינית', durationMins:240, cost:'חינם', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Garmisch-Partenkirchen+Germany' },
-  { emoji:'⛵', name:'Konstanz – Bodensee', location:'~1.5 שעות מ-Hinterzarten', description:'עיר מדינה ימי-ביניימית על הבודנזה | טיול אגם + טירה + שוק', durationMins:270, cost:'חינם', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Konstanz+Bodensee+Germany' },
-  { emoji:'🇨🇭', name:'Basel Switzerland', location:'~1 שעה מ-Hinterzarten', description:'מרכז אמנות עולמי | מוזיאון Fondation Beyeler + עיר עתיקה ציורית', durationMins:300, cost:'חינם (מוזיאון ~€25)', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Basel+Switzerland' },
-  { emoji:'🏰', name:'Rothenburg ob der Tauber', location:'~2 שעות מ-מינכן', description:'עיר ימי-ביניים מגודרת החמישה הכי יפות בעולם | כמו מתוך אגדה', durationMins:300, cost:'חינם', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Rothenburg+ob+der+Tauber+Germany' },
-  { emoji:'🕍', name:'Ulm Cathedral + Fischerturm', location:'~1.5 שעות מ-מינכן', description:'הקתדרלה הגבוהה בעולם (161 מ\') + שכונת הדייגים הציורית | עיר איינשטיין', durationMins:210, cost:'€5 עלייה', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Ulm+Cathedral+Germany' },
-  { emoji:'💧', name:'Rhine Falls – Schaffhausen', location:'~1.5 שעות', description:'המפל הגדול ביותר באירופה | ספינות לגלעין הסלע | מדהים!', durationMins:180, cost:'~€10', category:'travel', color:'yellow', mapsUrl:'https://maps.google.com/?q=Rhine+Falls+Schaffhausen+Switzerland' },
-
-  // ── אוכל — עוד ──
-  { emoji:'🥨', name:'Weisses Bräuhaus – ארוחת בוקר', location:'מינכן מרכז', description:'ארוחת בוקר בוורית קלאסית | Weisswurst + בייגל + ביר | לפני 12:00 בצהריים!', durationMins:75, cost:'€20–25', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Weisses+Brauhaus+Munich+Germany' },
-  { emoji:'🍖', name:'Wirtshaus in der Au', location:'מינכן', description:'הכנדל הכי טוב במינכן | Käsespätzle + בייר + אווירה מקומית אמיתית', durationMins:90, cost:'€25–35', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Wirtshaus+in+der+Au+Munich+Germany' },
-  { emoji:'🍺', name:'Augustiner Keller Beer Garden', location:'מינכן', description:'ביירגרטן ענקי של Augustiner | 5,000 מקומות | הכי אותנטי במינכן', durationMins:120, cost:'€15–25', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Augustiner+Keller+Munich+Germany' },
-  { emoji:'🥩', name:'Brenner Grill Munich', location:'מינכן מרכז', description:'מסעדת סטייק איטלקית איכותית | ברחוב Maximilianstrasse האלגנטי', durationMins:105, cost:'€45–60', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Brenner+Grill+Munich+Germany' },
-  { emoji:'🌿', name:'Zum Wirt, Hinterzarten', location:'Hinterzarten', description:'מסעדה מקומית קלאסית | Maultaschen + פטריות + בשר ציד', durationMins:90, cost:'€25–35', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Gasthaus+Hinterzarten+Germany' },
-  { emoji:'🍕', name:'Schneider Weisse G14', location:'מינכן', description:'פאב הביר הכי טוב ליד Marienplatz | Weizenbier מברל | מנות עם ביר', durationMins:90, cost:'€20–30', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Schneider+Weisse+Munich+Germany' },
-  { emoji:'🧇', name:'Café Rischart', location:'Marienplatz, מינכן', description:'קפה-בייקרי בוורי קלאסי | עוגות + לחמים + ארוחות בוקר | מול Frauenkirche', durationMins:60, cost:'€10–18', category:'food', color:'orange', mapsUrl:'https://maps.google.com/?q=Cafe+Rischart+Munich+Germany' },
-
-  // ── מיוחד — עוד ──
-  { emoji:'🍺', name:'אוקטוברפסט / ביירגרטן גדול', location:'Theresienwiese / Munich', description:'חוויית הביר הגדולה בעולם | לפי תאריכי הטיול: Oktoberfest / ביירגרטן ענק', durationMins:300, cost:'€30–60', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Oktoberfest+Munich+Theresienwiese' },
-  { emoji:'🎯', name:'Laser Tag Munich', location:'מינכן', description:'לייזר טאג מתקדם | קבוצה שלמה | ~30 דק\' פעילות', durationMins:90, cost:'~€15', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Laser+Tag+Munich+Germany' },
-  { emoji:'🍳', name:'Bavarian Cooking Class', location:'מינכן', description:'שיעור בישול בוורי | Pretzel + Weisswurst + Schnitzel | חוויה קולינרית', durationMins:180, cost:'~€65', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Cooking+Class+Munich+Germany' },
-  { emoji:'🎪', name:'Night at Tollwood Festival', location:'מינכן', description:'פסטיבל אמנות + מוזיקה + אוכל עולמי | קיים בקיץ/חורף | אווירה קסומה', durationMins:240, cost:'חינם (כניסה)', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Tollwood+Festival+Munich+Germany' },
-  { emoji:'🛶', name:'Rafting on Isar River', location:'מינכן', description:'רפטינג על הנהר Isar | סירות עץ מסורתיות | חוויה בוורית אמיתית', durationMins:210, cost:'~€30', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Isar+Rafting+Munich+Germany' },
-  { emoji:'🎳', name:'Bowling + Bar Night', location:'מינכן', description:'ערב בולינג קבוצתי | Bar + bowling | מושלם לכוליב', durationMins:180, cost:'~€20', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Bowling+Munich+Germany' },
-  { emoji:'🌅', name:'Sunset at Frauenkirche Tower', location:'מינכן מרכז', description:'תצפית שקיעה מהמגדל הכי אייקוני של מינכן | חובה!', durationMins:60, cost:'€7.5', category:'special', color:'red', mapsUrl:'https://maps.google.com/?q=Frauenkirche+Munich+Germany' },
-];
+/** Soft pill action buttons — modern / smooth */
+const iconBtn =
+  'inline-flex items-center justify-center w-7 h-7 rounded-full text-neutral-500 ' +
+  'bg-white/55 backdrop-blur-[2px] shadow-sm ring-1 ring-black/[0.04] ' +
+  'hover:text-brand-600 hover:bg-white hover:shadow hover:ring-brand-200/60 ' +
+  'active:scale-95 transition-all duration-200 ease-out flex-shrink-0';
+const iconBtnSm =
+  'inline-flex items-center justify-center w-6 h-6 rounded-full text-neutral-500 ' +
+  'bg-white/50 ring-1 ring-black/[0.04] ' +
+  'hover:text-brand-600 hover:bg-white hover:shadow-sm ' +
+  'active:scale-95 transition-all duration-200 ease-out flex-shrink-0';
+const iconBtnGhost =
+  'inline-flex items-center justify-center w-7 h-7 rounded-full text-neutral-400 ' +
+  'hover:text-brand-600 hover:bg-brand-50 ' +
+  'active:scale-95 transition-all duration-200 ease-out flex-shrink-0';
+const iconBtnDanger =
+  'inline-flex items-center justify-center w-7 h-7 rounded-full text-neutral-500 ' +
+  'bg-white/55 backdrop-blur-[2px] shadow-sm ring-1 ring-black/[0.04] ' +
+  'hover:text-red-600 hover:bg-red-50 hover:ring-red-100 ' +
+  'active:scale-95 transition-all duration-200 ease-out flex-shrink-0';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,17 +245,29 @@ interface Activity {
   durationMins: number; cost?: string; category: string; mapsUrl?: string; url?: string; color: string;
   files: ActivityFile[];
 }
+
+interface ScheduleWarning {
+  severity: 'warn' | 'critical';
+  code: string;
+  message: string;
+  dayLabel?: string;
+  hoursSummary?: string;
+  source: 'google' | 'heuristic';
+}
+
 interface CalEvent {
   id: string; activityId?: string; title: string; date: string;
   startMinute: number; durationMins: number; color: string; notes?: string;
   allDay?: boolean; url?: string; mapsUrl?: string; cost?: string; files?: EventFile[];
+  scheduleWarnings?: ScheduleWarning[];
+  scheduleSeverity?: 'warn' | 'critical' | null;
 }
 
 type ModalState =
   | { type: 'none' }
   | { type: 'addActivity'; data?: Partial<Activity> }
   | { type: 'editActivity'; activity: Activity }
-  | { type: 'addEvent'; date: string; startMinute: number; activityId?: string; title?: string; color?: string; durationMins?: number; url?: string; mapsUrl?: string; cost?: string }
+  | { type: 'addEvent'; date: string; startMinute: number; activityId?: string; title?: string; color?: string; durationMins?: number; url?: string; mapsUrl?: string; cost?: string; category?: string; location?: string }
   | { type: 'editEvent'; event: CalEvent };
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -204,7 +283,17 @@ export const PlannerPage: React.FC = () => {
   const [filter, setFilter]         = useState('all');
   const [search, setSearch]         = useState('');
   const [loading, setLoading]       = useState(true);
-  const [seeding, setSeeding]       = useState(false);
+  const [weatherByDate, setWeatherByDate] = useState<Record<string, { emoji: string; tempMax: number; rain: number | null }>>({});
+  const [hoursToast, setHoursToast] = useState<{ severity: 'warn' | 'critical'; messages: string[] } | null>(null);
+  const [aiDraft, setAiDraft] = useState<{
+    summaryHe: string;
+    skipped: Array<{ activityId: string; name: string; reason: string }>;
+    voteStats?: { activities: number; withVotes: number; totalVoteRows: number };
+  } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
+  /** Events before AI preview — restored on Cancel */
+  const baselineEventsRef = useRef<CalEvent[] | null>(null);
 
   type AddToMapState =
     | { status: 'geocoding'; name: string }
@@ -233,6 +322,18 @@ export const PlannerPage: React.FC = () => {
       setActivities(r.data.activities);
       setEvents(r.data.events);
     }).finally(() => setLoading(false));
+    apiClient.get(`/api/weather/${tripId}`).then(r => {
+      const daily = r.data?.weather?.daily ?? [];
+      const map: Record<string, { emoji: string; tempMax: number; rain: number | null }> = {};
+      for (const d of daily) {
+        map[d.date] = {
+          emoji: d.emoji,
+          tempMax: d.tempMax,
+          rain: d.precipitationProbability,
+        };
+      }
+      setWeatherByDate(map);
+    }).catch(() => {});
   }, [tripId]);
 
   // ── Global mouse handlers for drag-move / drag-resize within calendar ──
@@ -266,7 +367,20 @@ export const PlannerPage: React.FC = () => {
       dragEvtState.current = null;
       wasDragging.current = true;
       const ev = eventsRef.current.find(e => e.id === ds.eventId);
-      if (ev) apiClient.patch(`/api/planner/${tripId}/events/${ev.id}`, { date: ev.date, startMinute: ev.startMinute, durationMins: ev.durationMins }).catch(console.error);
+      if (ev) {
+        apiClient
+          .patch(`/api/planner/${tripId}/events/${ev.id}`, {
+            date: ev.date,
+            startMinute: ev.startMinute,
+            durationMins: ev.durationMins,
+          })
+          .then((r) => {
+            const updated = r.data.event as CalEvent;
+            setEvents((prev) => prev.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)));
+            showHoursToast(updated.scheduleWarnings);
+          })
+          .catch(console.error);
+      }
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -308,13 +422,139 @@ export const PlannerPage: React.FC = () => {
     setModal({ type: 'none' });
   };
 
-  const saveEvent = async (data: Omit<CalEvent, 'id'> & { id?: string }) => {
-    if (data.id) {
-      const r = await apiClient.patch(`/api/planner/${tripId}/events/${data.id}`, data);
-      setEvents(prev => prev.map(ev => ev.id === data.id ? r.data.event : ev));
-    } else {
-      const r = await apiClient.post(`/api/planner/${tripId}/events`, data);
-      setEvents(prev => [...prev, r.data.event]);
+  const runAiSchedule = async () => {
+    if (!tripId || aiLoading || aiDraft) return;
+    if (!currentTrip?.startDate || !currentTrip?.endDate) {
+      window.alert('יש להגדיר תאריכי התחלה וסיום לטיול לפני סידור AI');
+      return;
+    }
+    if (activities.length === 0) {
+      window.alert('אין פעילויות בבנק — הוסיפו פעילויות והצביעו קודם');
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const { data } = await apiClient.post(`/api/planner/${tripId}/ai-schedule`);
+      const slots = data.slots ?? [];
+      if (!slots.length) {
+        window.alert(data.error || 'ה-AI לא החזיר לוח זמנים');
+        return;
+      }
+      baselineEventsRef.current = eventsRef.current;
+      // Preview: keep existing all-day, replace timed with AI draft
+      const keepAllDay = eventsRef.current.filter((e) => e.allDay);
+      const draftEvents: CalEvent[] = slots.map((s: any) => ({
+        id: s.tempId || `draft-${s.activityId}-${s.date}-${s.startMinute}`,
+        activityId: s.activityId,
+        title: s.title,
+        date: s.date,
+        startMinute: s.startMinute ?? 0,
+        durationMins: s.durationMins ?? 60,
+        color: s.color || 'purple',
+        allDay: Boolean(s.allDay),
+        notes: s.reason || s.notes || null,
+        mapsUrl: s.mapsUrl || null,
+        cost: s.cost || null,
+        scheduleWarnings: s.scheduleWarnings,
+        scheduleSeverity: s.scheduleSeverity,
+      }));
+      setEvents([...keepAllDay.filter((e) => !draftEvents.some((d) => d.allDay && d.date === e.date)), ...draftEvents]);
+      setAiDraft({
+        summaryHe: data.summaryHe || '',
+        skipped: data.skipped || [],
+        voteStats: data.voteStats,
+      });
+    } catch (e: any) {
+      window.alert(e?.response?.data?.error || 'שגיאה ביצירת לוח AI');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const cancelAiSchedule = () => {
+    if (baselineEventsRef.current) {
+      setEvents(baselineEventsRef.current);
+    }
+    baselineEventsRef.current = null;
+    setAiDraft(null);
+  };
+
+  const confirmAiSchedule = async () => {
+    if (!tripId || !aiDraft) return;
+    const draftSlots = eventsRef.current
+      .filter((e) => String(e.id).startsWith('draft-'))
+      .map((e) => ({
+        activityId: e.activityId!,
+        title: e.title,
+        date: e.date,
+        startMinute: e.startMinute,
+        durationMins: e.durationMins,
+        allDay: e.allDay,
+        color: e.color,
+        notes: e.notes,
+        mapsUrl: e.mapsUrl,
+        cost: e.cost,
+      }))
+      .filter((s) => s.activityId);
+
+    if (!draftSlots.length) {
+      window.alert('אין אירועי טיוטה לאישור');
+      return;
+    }
+
+    setAiApplying(true);
+    try {
+      const { data } = await apiClient.post(`/api/planner/${tripId}/ai-schedule/apply`, {
+        slots: draftSlots,
+        replaceTimed: true,
+      });
+      setEvents(data.events ?? []);
+      if (data.activities) setActivities(data.activities);
+      baselineEventsRef.current = null;
+      setAiDraft(null);
+      window.alert(`✅ הלוח עודכן — ${data.created ?? draftSlots.length} אירועים נשמרו`);
+    } catch (e: any) {
+      window.alert(e?.response?.data?.error || 'שגיאה באישור הלוח');
+    } finally {
+      setAiApplying(false);
+    }
+  };
+
+  const showHoursToast = (warnings?: ScheduleWarning[] | null) => {
+    if (!warnings?.length) return;
+    const severity = warnings.some((w) => w.severity === 'critical') ? 'critical' : 'warn';
+    const sorted = [...warnings].sort((a, b) => {
+      const score = (w: ScheduleWarning) =>
+        w.severity === 'critical' ? 0 : 1;
+      return score(a) - score(b);
+    });
+    setHoursToast({ severity, messages: sorted.map((w) => w.message) });
+    // Unmissable for critical
+    if (severity === 'critical') {
+      window.setTimeout(() => {
+        window.alert(
+          '🚫 המקום סגור בזמן ששיבצתם:\n\n' +
+            sorted.map((w) => '• ' + w.message).join('\n\n'),
+        );
+      }, 50);
+    }
+    window.setTimeout(() => setHoursToast(null), 15000);
+  };
+
+  const saveEvent = async (data: Omit<CalEvent, 'id'> & { id?: string } & { category?: string; location?: string }) => {
+    try {
+      if (data.id) {
+        const r = await apiClient.patch(`/api/planner/${tripId}/events/${data.id}`, data);
+        setEvents(prev => prev.map(ev => ev.id === data.id ? { ...ev, ...r.data.event } : ev));
+        showHoursToast(r.data.scheduleWarnings ?? r.data.event?.scheduleWarnings);
+      } else {
+        const r = await apiClient.post(`/api/planner/${tripId}/events`, data);
+        setEvents(prev => [...prev, r.data.event]);
+        showHoursToast(r.data.scheduleWarnings ?? r.data.event?.scheduleWarnings);
+      }
+    } catch (e: any) {
+      window.alert(e?.response?.data?.error || 'שגיאה בשמירת האירוע');
+      return;
     }
     setModal({ type: 'none' });
   };
@@ -334,13 +574,6 @@ export const PlannerPage: React.FC = () => {
     }
   };
 
-  const seedActivities = async () => {
-    setSeeding(true);
-    try {
-      const r = await apiClient.post(`/api/planner/${tripId}/activities/bulk`, { activities: TEMPLATES });
-      setActivities(r.data.activities);
-    } finally { setSeeding(false); }
-  };
 
   // ── Add to Map ──
   const handleAddToMap = async (name: string, location?: string, mapsUrl?: string, category?: string) => {
@@ -400,7 +633,20 @@ export const PlannerPage: React.FC = () => {
     const act = activities.find(a => a.id === actId);
     if (!act) return;
     const startMinute = getMinuteFromEvent(e);
-    setModal({ type: 'addEvent', date, startMinute, activityId: act.id, title: act.name, color: act.color, durationMins: act.durationMins, url: act.url, mapsUrl: act.mapsUrl, cost: act.cost });
+    setModal({
+      type: 'addEvent',
+      date,
+      startMinute,
+      activityId: act.id,
+      title: act.name,
+      color: act.color,
+      durationMins: act.durationMins,
+      url: act.url,
+      mapsUrl: act.mapsUrl,
+      cost: act.cost,
+      category: act.category,
+      location: act.location,
+    });
   };
 
   const handleColClick = (e: React.MouseEvent<HTMLDivElement>, date: string) => {
@@ -412,32 +658,228 @@ export const PlannerPage: React.FC = () => {
   // ── Visible activities (exclude already-scheduled ones) ──
   const scheduledActIds = new Set(events.filter(ev => ev.activityId).map(ev => ev.activityId!));
   const searchLower = search.trim().toLowerCase();
+  // Only show filter chips for categories that actually exist in this trip's bank
+  const filterCats = useMemo(() => {
+    const present = new Set(activities.map(a => a.category).filter(Boolean));
+    const known = CATS.filter(c => present.has(c.id));
+    const extra = [...present]
+      .filter(id => !CATS.some(c => c.id === id))
+      .map(id => ({ id, label: id, color: 'gray' as const }));
+    return [...known, ...extra];
+  }, [activities]);
+  // Reset filter if selected category disappeared (e.g. bank cleared)
+  useEffect(() => {
+    if (filter !== 'all' && !filterCats.some(c => c.id === filter)) setFilter('all');
+  }, [filter, filterCats]);
   const visibleActs = (filter === 'all' ? activities : activities.filter(a => a.category === filter))
     .filter(a => !scheduledActIds.has(a.id))
     .filter(a => !searchLower || a.name.toLowerCase().includes(searchLower) || a.location?.toLowerCase().includes(searchLower) || a.description?.toLowerCase().includes(searchLower));
+
+  const eventsWithHoursIssues = events.filter(
+    (ev) => (ev.scheduleWarnings && ev.scheduleWarnings.length > 0) || ev.scheduleSeverity,
+  );
+  const criticalHoursCount = eventsWithHoursIssues.filter(
+    (ev) => ev.scheduleSeverity === 'critical' || ev.scheduleWarnings?.some((w) => w.severity === 'critical'),
+  ).length;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
-      {/* Mobile gate */}
-      <div className="md:hidden flex flex-col items-center justify-center h-screen bg-neutral-50 p-8 text-center">
-        <div className="text-6xl mb-4">🖥️</div>
-        <h2 className="text-xl font-bold text-neutral-800 mb-2">מתכנן הטיול זמין רק בדסקטופ</h2>
-        <p className="text-neutral-500 text-sm mb-6">פתח את האפליקציה במחשב כדי להשתמש במתכנן</p>
-        <button onClick={() => navigate(`/trip/${tripId}`)} className="text-brand-500 font-medium text-sm">← חזרה לטיול</button>
+      {/* Hours warning toast (desktop + after save) */}
+      {hoursToast && (
+        <div
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-[10050] max-w-md w-[min(92vw,28rem)] rounded-2xl shadow-xl border px-4 py-3 ${
+            hoursToast.severity === 'critical'
+              ? 'bg-red-50 border-red-200 text-red-900'
+              : 'bg-amber-50 border-amber-200 text-amber-900'
+          }`}
+          dir="rtl"
+        >
+          <div className="flex items-start gap-2">
+            <span className="text-lg flex-shrink-0">{hoursToast.severity === 'critical' ? '🚫' : '⚠️'}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold mb-1">
+                {hoursToast.severity === 'critical' ? 'ייתכן שהמקום סגור בזמן הזה' : 'שימו לב לשעות פתיחה'}
+              </p>
+              <ul className="text-xs space-y-1 leading-relaxed">
+                {hoursToast.messages.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHoursToast(null)}
+              className="text-neutral-400 hover:text-neutral-700 text-sm flex-shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile — plan tab + hours issues + desktop hint */}
+      <div className="md:hidden">
+        <AppShell showBottomNav>
+          <PlanSubNav />
+          {eventsWithHoursIssues.length > 0 && (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-right">
+              <p className="text-sm font-bold text-red-800 mb-2">
+                🚫 {eventsWithHoursIssues.length} אירועים עם בעיית שעות פתיחה
+              </p>
+              <ul className="flex flex-col gap-2">
+                {eventsWithHoursIssues.slice(0, 6).map((ev) => (
+                  <li key={ev.id} className="text-xs text-red-700 bg-white/70 rounded-xl px-3 py-2">
+                    <span className="font-semibold">{ev.title}</span>
+                    <span className="text-red-500"> · {fmtDate(ev.date)} · {fmtMin(ev.startMinute)}</span>
+                    {ev.scheduleWarnings?.[0] && (
+                      <p className="mt-0.5 text-red-600/90 leading-relaxed">{ev.scheduleWarnings[0].message}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex flex-col items-center justify-center py-12 text-center px-2">
+            <div className="text-6xl mb-4">🖥️</div>
+            <h2 className="text-xl font-bold text-neutral-800 mb-2">לוח זמנים בדסקטופ</h2>
+            <p className="text-neutral-500 text-sm mb-6">
+              פתח במחשב כדי לערוך את לוח הזמנים. במובייל אפשר להצביע על פעילויות ולנהל החלטות.
+              {eventsWithHoursIssues.length > 0 && ' התראות שעות פתיחה מוצגות למעלה.'}
+            </p>
+            <button
+              onClick={() => navigate(`/trip/${tripId}/plan/activities`)}
+              className="bg-brand-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold mb-3"
+            >
+              🗳️ להצבעה על פעילויות
+            </button>
+            <button
+              onClick={() => navigate(`/trip/${tripId}/plan/decisions`)}
+              className="text-brand-500 font-medium text-sm"
+            >
+              ← להחלטות
+            </button>
+          </div>
+        </AppShell>
       </div>
+
 
       {/* Desktop view */}
       <div className="hidden md:flex flex-col h-screen overflow-hidden bg-neutral-50">
 
+        {/* Plan sub-tabs (החלטות / פעילויות / לוח זמנים) */}
+        <div className="px-5 pt-3 pb-0 bg-white border-b border-neutral-100 flex-shrink-0">
+          <PlanSubNav />
+        </div>
+
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-neutral-200 flex-shrink-0">
-          <button onClick={() => navigate(`/trip/${tripId}`)} className="text-sm text-neutral-500 hover:text-neutral-800 font-medium">← חזרה</button>
+          <button onClick={() => navigate(`/trip/${tripId}/home`)} className="text-sm text-neutral-500 hover:text-neutral-800 font-medium">← בית</button>
           <div className="w-px h-5 bg-neutral-200" />
           <h1 className="font-bold text-neutral-900">📅 מתכנן טיול — {currentTrip?.name}</h1>
-          <span className="text-xs text-neutral-400 mr-auto">גרור פעילות לתוך יום | לחץ על תא לאירוע ידני | גרור אירוע להזזה/שינוי זמן</span>
+          <span className="text-xs text-neutral-400 mr-auto">
+            {aiDraft
+              ? 'מצב תצוגה מקדימה של AI — אשרו או בטלו'
+              : 'גרור פעילות לתוך יום | לחץ על תא לאירוע ידני | גרור אירוע להזזה/שינוי זמן'}
+          </span>
+          {!aiDraft && (
+            <button
+              type="button"
+              onClick={runAiSchedule}
+              disabled={aiLoading}
+              className="text-xs font-bold px-3 py-1.5 rounded-full bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 flex-shrink-0"
+              title="סידור לפי הצבעות (MUST קודם) + חלונות פתיחה — ללא חורים/סגירות"
+            >
+              {aiLoading ? '⏳ מסדר לפי הצבעות…' : '✨ סידור חכם לפי הצבעות'}
+            </button>
+          )}
+          {eventsWithHoursIssues.length > 0 && (
+            <span
+              className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                criticalHoursCount
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+              title="אירועים עם בעיית שעות פתיחה"
+            >
+              {criticalHoursCount ? '🚫' : '⚠️'} {eventsWithHoursIssues.length} שעות
+            </span>
+          )}
         </div>
+
+        {/* AI draft confirm bar */}
+        {aiDraft && (
+          <div className="px-5 py-3 border-b border-purple-200 bg-purple-50 flex flex-col gap-2 flex-shrink-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-purple-900">✨ הצעת לוח AI (טיוטה — עדיין לא נשמר)</p>
+                <p className="text-xs text-purple-800 mt-0.5 leading-relaxed">{aiDraft.summaryHe}</p>
+                {aiDraft.voteStats && (
+                  <p className="text-[11px] text-purple-600 mt-1">
+                    {aiDraft.voteStats.activities} פעילויות · {aiDraft.voteStats.withVotes} עם הצבעות ·{' '}
+                    {events.filter((e) => String(e.id).startsWith('draft-')).length} שובצו בטיוטה
+                    {aiDraft.skipped.length > 0 ? ` · ${aiDraft.skipped.length} דולגו` : ''}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={cancelAiSchedule}
+                  disabled={aiApplying}
+                  className="text-xs font-bold px-4 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  ביטול — שחזר
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAiSchedule}
+                  disabled={aiApplying}
+                  className="text-xs font-bold px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {aiApplying ? 'שומר…' : 'אישור — שמור ללוח'}
+                </button>
+              </div>
+            </div>
+            {aiDraft.skipped.length > 0 && (
+              <details className="text-[11px] text-purple-700">
+                <summary className="cursor-pointer font-semibold">
+                  פעילויות שלא שובצו ({aiDraft.skipped.length})
+                </summary>
+                <ul className="mt-1 space-y-0.5 pr-2">
+                  {aiDraft.skipped.slice(0, 12).map((s) => (
+                    <li key={s.activityId}>
+                      <strong>{s.name}</strong> — {s.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+
+        {eventsWithHoursIssues.length > 0 && (
+          <div
+            className={`px-5 py-2 border-b text-xs flex flex-wrap gap-x-4 gap-y-1 ${
+              criticalHoursCount
+                ? 'bg-red-50 border-red-100 text-red-800'
+                : 'bg-amber-50 border-amber-100 text-amber-900'
+            }`}
+          >
+            <span className="font-bold flex-shrink-0">
+              {criticalHoursCount ? '🚫 מקומות שכנראה סגורים בזמן המתוכנן:' : '⚠️ בדקו שעות פתיחה:'}
+            </span>
+            {eventsWithHoursIssues.slice(0, 5).map((ev) => (
+              <span key={ev.id} className="truncate max-w-[14rem]">
+                <strong>{ev.title}</strong> ({fmtDate(ev.date)} {fmtMin(ev.startMinute)})
+              </span>
+            ))}
+            {eventsWithHoursIssues.length > 5 && (
+              <span>+{eventsWithHoursIssues.length - 5} נוספים</span>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-1 min-h-0">
 
@@ -449,7 +891,7 @@ export const PlannerPage: React.FC = () => {
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-bold text-sm text-neutral-800">📦 פעילויות</h2>
                 <div className="flex gap-2">
-                  <button onClick={() => navigate(`/trip/${tripId}/questionnaire`)} className="text-xs text-purple-600 font-medium hover:text-purple-800">🗳️ שאלון</button>
+                  <button onClick={() => navigate(`/trip/${tripId}/plan/activities`)} className="text-xs text-purple-600 font-medium hover:text-purple-800">🗳️ שאלון</button>
                   <button onClick={() => setModal({ type: 'addActivity' })} className="text-xs text-brand-500 font-medium hover:text-brand-700">+ הוסף</button>
                 </div>
               </div>
@@ -469,13 +911,15 @@ export const PlannerPage: React.FC = () => {
                 {search && <button onClick={() => setSearch('')} className="text-neutral-400 hover:text-neutral-600 text-xs leading-none">✕</button>}
               </div>
             </div>
-            {/* Filters */}
-            <div className="flex gap-1 flex-wrap px-3 py-2 border-b border-neutral-100">
-              <button onClick={() => setFilter('all')} className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filter === 'all' ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>הכל</button>
-              {CATS.map(c => (
-                <button key={c.id} onClick={() => setFilter(c.id)} className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filter === c.id ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>{c.label}</button>
-              ))}
-            </div>
+            {/* Filters — only when the bank has categorized activities */}
+            {filterCats.length > 0 && (
+              <div className="flex gap-1 flex-wrap px-3 py-2 border-b border-neutral-100">
+                <button onClick={() => setFilter('all')} className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filter === 'all' ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>הכל</button>
+                {filterCats.map(c => (
+                  <button key={c.id} onClick={() => setFilter(c.id)} className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filter === c.id ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>{c.label}</button>
+                ))}
+              </div>
+            )}
 
             {/* Activity list */}
             <div className="flex-1 overflow-y-auto px-2 py-2 flex flex-col gap-1.5">
@@ -484,10 +928,10 @@ export const PlannerPage: React.FC = () => {
               ) : activities.length === 0 ? (
                 <div className="text-center py-8 px-3">
                   <p className="text-sm text-neutral-500 mb-3">אין פעילויות עדיין</p>
-                  <button onClick={seedActivities} disabled={seeding} className="text-xs bg-brand-500 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-brand-600">
-                    {seeding ? '⏳ טוען...' : '✨ ייבא פעילויות לדוגמה'}
+                  <button onClick={() => setModal({ type: 'addActivity' })} className="text-xs bg-brand-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-600">
+                    + הוסף פעילות
                   </button>
-                  <p className="text-xs text-neutral-400 mt-2">35 פעילויות מיער שחור + מינכן</p>
+                  <p className="text-xs text-neutral-400 mt-2">הוסיפו מקומות ואטרקציות לטיול שלכם</p>
                 </div>
               ) : visibleActs.length === 0 ? (
                 <p className="text-xs text-neutral-400 text-center py-4">אין פעילויות בקטגוריה זו</p>
@@ -553,6 +997,11 @@ export const PlannerPage: React.FC = () => {
                     <div key={date} className="flex-1 border-r border-neutral-200 flex flex-col items-center justify-center">
                       <span className="text-xs font-bold text-neutral-700">{fmtDate(date)}</span>
                       <span className="text-xs text-neutral-400">{events.filter(ev => ev.date === date && !ev.allDay).length} אירועים</span>
+                      {weatherByDate[date] && (
+                        <span className="text-[10px] text-neutral-500 mt-0.5" title={weatherByDate[date].rain != null ? `גשם ${weatherByDate[date].rain}%` : undefined}>
+                          {weatherByDate[date].emoji} {weatherByDate[date].tempMax}°
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -643,6 +1092,8 @@ export const PlannerPage: React.FC = () => {
           defaultUrl={modal.type === 'addEvent' ? modal.url : undefined}
           defaultMapsUrl={modal.type === 'addEvent' ? modal.mapsUrl : undefined}
           defaultCost={modal.type === 'addEvent' ? modal.cost : undefined}
+          defaultCategory={modal.type === 'addEvent' ? modal.category : undefined}
+          defaultLocation={modal.type === 'addEvent' ? modal.location : undefined}
           days={days}
           onSave={saveEvent}
           onDelete={modal.type === 'editEvent' ? deleteEvent : undefined}
@@ -670,21 +1121,67 @@ const ActivityCard: React.FC<{
       onDragEnd={onDragEnd}
       className="rounded-xl border border-neutral-200 bg-white px-2.5 py-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow select-none group"
     >
-      {/* Row 1: emoji + name + edit + map */}
+      {/* Row 1: emoji + name + actions */}
       <div className="flex items-center gap-1.5">
         <span className="text-base flex-shrink-0">{act.emoji}</span>
         <span className="text-xs font-bold text-neutral-800 leading-snug flex-1 truncate">{act.name}</span>
-        <button onClick={e => { e.stopPropagation(); onAddToMap(); }} title="הוסף למפה" className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-green-600 text-xs flex-shrink-0 px-0.5">📍</button>
-        <button onClick={e => { e.stopPropagation(); onEdit(); }} className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-600 text-xs flex-shrink-0 px-0.5">✏️</button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAddToMap(); }}
+          title="הוסף למפה"
+          className={`${iconBtnGhost} opacity-0 group-hover:opacity-100`}
+        >
+          <Icon name="pin" size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          title="עריכה"
+          className={`${iconBtnGhost} opacity-0 group-hover:opacity-100`}
+        >
+          <Icon name="edit" size={14} />
+        </button>
       </div>
-      {/* Row 2: icons */}
+      {/* Row 2: meta + outline icons */}
       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${c.pill}`}>{CATS.find(c => c.id === act.category)?.label ?? act.category}</span>
-        {act.cost && <span className="text-xs font-medium text-neutral-600">💰 {act.cost}</span>}
-        <span className="text-xs text-neutral-400">⏱ {fmtDur(act.durationMins)}</span>
-        {act.url && <a href={act.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-blue-500 hover:text-blue-700">🔗</a>}
-        {act.mapsUrl && <a href={act.mapsUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-blue-500 hover:text-blue-700">🗺️</a>}
-        {act.files?.length > 0 && <span className="text-xs text-neutral-400">📎 {act.files.length}</span>}
+        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${c.pill}`}>
+          {catLabel(act.category)}
+        </span>
+        {act.cost && <span className="text-xs font-medium text-neutral-600">{act.cost}</span>}
+        <span className="inline-flex items-center gap-0.5 text-xs text-neutral-400">
+          <Icon name="clock" size={12} className="text-neutral-400" />
+          {fmtDur(act.durationMins)}
+        </span>
+        {act.url && (
+          <a
+            href={act.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="קישור"
+            className={iconBtnGhost}
+          >
+            <Icon name="link" size={13} />
+          </a>
+        )}
+        {act.mapsUrl && (
+          <a
+            href={act.mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="מפה"
+            className={iconBtnGhost}
+          >
+            <Icon name="map" size={13} />
+          </a>
+        )}
+        {act.files?.length > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-xs text-neutral-400" title="קבצים">
+            <Icon name="paperclip" size={12} className="text-neutral-400" />
+            {act.files.length}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -699,7 +1196,6 @@ const AllDayEvent: React.FC<{
   onDelete: () => void;
 }> = ({ event: ev, onEdit, onReturnToBank, onDelete }) => {
   const c = col(ev.color);
-  const btn = 'hover:bg-black/10 rounded px-0.5 leading-none';
   return (
     <div
       className={`group flex items-center justify-between rounded px-1.5 py-0.5 text-xs font-medium cursor-pointer ${c.event} ${c.text}`}
@@ -708,19 +1204,101 @@ const AllDayEvent: React.FC<{
       <span className="truncate flex-1">{ev.title}</span>
       <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 flex-shrink-0 ml-1">
         {ev.url && (
-          <a href={ev.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className={btn}>🔗</a>
+          <a
+            href={ev.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="קישור"
+            className={iconBtnSm}
+          >
+            <Icon name="link" size={12} />
+          </a>
         )}
-        <button onClick={e => { e.stopPropagation(); onEdit(); }} className={btn}>✏️</button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(); }} title="עריכה" className={iconBtnSm}>
+          <Icon name="edit" size={12} />
+        </button>
         {onReturnToBank && (
-          <button onClick={e => { e.stopPropagation(); onReturnToBank(); }} title="החזר לבנק" className={btn}>↩️</button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); onReturnToBank(); }} title="החזר לבנק" className={iconBtnSm}>
+            <Icon name="undo" size={12} />
+          </button>
         )}
-        <button onClick={e => { e.stopPropagation(); if (confirm(ev.activityId ? 'למחוק אירוע ופעילות לצמיתות?' : 'למחוק אירוע?')) onDelete(); }} className={btn}>🗑️</button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm(ev.activityId ? 'למחוק אירוע ופעילות לצמיתות?' : 'למחוק אירוע?')) onDelete();
+          }}
+          title="מחק"
+          className={`${iconBtnSm} hover:text-red-600 hover:bg-red-50`}
+        >
+          <Icon name="trash" size={12} />
+        </button>
       </div>
     </div>
   );
 };
 
 // ─── Day Column ────────────────────────────────────────────────────────────────
+
+/** Side-by-side layout for overlapping events (Google-Calendar style).
+ *  Groups transitively-overlapping events into clusters, assigns each event a
+ *  column, and returns left/width percentages per event id. */
+function layoutDayEvents(events: CalEvent[]): Map<string, { leftPct: number; widthPct: number }> {
+  const out = new Map<string, { leftPct: number; widthPct: number }>();
+  if (!events.length) return out;
+
+  const sorted = [...events].sort(
+    (a, b) => a.startMinute - b.startMinute || b.durationMins - a.durationMins,
+  );
+
+  let cluster: CalEvent[] = [];
+  let clusterEnd = -1;
+
+  const flush = () => {
+    if (!cluster.length) return;
+    // Greedy column assignment inside the cluster
+    const colEnds: number[] = []; // end minute of last event in each column
+    const colOf = new Map<string, number>();
+    for (const ev of cluster) {
+      const start = ev.startMinute;
+      const end = ev.startMinute + Math.max(ev.durationMins, 1);
+      let placed = -1;
+      for (let i = 0; i < colEnds.length; i++) {
+        if (colEnds[i] <= start) { placed = i; break; }
+      }
+      if (placed === -1) { placed = colEnds.length; colEnds.push(end); }
+      else colEnds[placed] = end;
+      colOf.set(ev.id, placed);
+    }
+    const n = colEnds.length;
+    for (const ev of cluster) {
+      const idx = colOf.get(ev.id) ?? 0;
+      out.set(ev.id, { leftPct: (idx * 100) / n, widthPct: 100 / n });
+    }
+    cluster = [];
+    clusterEnd = -1;
+  };
+
+  for (const ev of sorted) {
+    const start = ev.startMinute;
+    const end = ev.startMinute + Math.max(ev.durationMins, 1);
+    // If new event starts at or after cluster ends, flush previous cluster
+    if (cluster.length && start >= clusterEnd) {
+      flush();
+    }
+    cluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, end);
+  }
+  flush();
+
+  // Debug logging
+  if (out.size > 0) {
+    console.log('[overlap-layout]', events.length, 'events →', out.size, 'positioned', Array.from(out.entries()).map(([id, l]) => `${id.slice(0,8)}:${l.leftPct.toFixed(0)}%/${l.widthPct.toFixed(0)}%`));
+  }
+
+  return out;
+}
 
 const DayColumn: React.FC<{
   date: string;
@@ -735,7 +1313,9 @@ const DayColumn: React.FC<{
   onEventDeleteFull: (ev: CalEvent) => void;
   onEventAddToMap: (ev: CalEvent) => void;
   colRef: (el: HTMLDivElement | null) => void;
-}> = ({ date: _date, events, onDragOver, onDrop, onClick, onEventClick, onEventMouseDown, onEventEdit, onEventReturnToBank, onEventDeleteFull, onEventAddToMap, colRef }) => (
+}> = ({ date: _date, events, onDragOver, onDrop, onClick, onEventClick, onEventMouseDown, onEventEdit, onEventReturnToBank, onEventDeleteFull, onEventAddToMap, colRef }) => {
+  const layout = useMemo(() => layoutDayEvents(events), [events]);
+  return (
   <div
     ref={colRef}
     className="flex-1 border-r border-neutral-200 relative cursor-crosshair overflow-hidden"
@@ -758,6 +1338,7 @@ const DayColumn: React.FC<{
       <CalendarEvent
         key={ev.id}
         event={ev}
+        layout={layout.get(ev.id)}
         onClick={() => onEventClick(ev)}
         onMouseDown={(e, type) => { e.stopPropagation(); onEventMouseDown(e, ev, type); }}
         onEdit={() => onEventEdit(ev)}
@@ -767,7 +1348,8 @@ const DayColumn: React.FC<{
       />
     ))}
   </div>
-);
+  );
+};
 
 // ─── Calendar Event ───────────────────────────────────────────────────────────
 
@@ -776,8 +1358,13 @@ const FilesPopup: React.FC<{ files: EventFile[]; onClose: () => void }> = ({ fil
     <div className="absolute inset-0 bg-black/30" />
     <div className="relative bg-white rounded-2xl shadow-2xl p-4 w-72" dir="rtl" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-sm text-neutral-800">📎 קבצים מצורפים</h3>
-        <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 text-lg leading-none px-1">✕</button>
+        <h3 className="font-bold text-sm text-neutral-800 inline-flex items-center gap-1.5">
+          <Icon name="paperclip" size={15} className="text-neutral-600" />
+          קבצים מצורפים
+        </h3>
+        <button type="button" onClick={onClose} className={iconBtnGhost} title="סגור">
+          <Icon name="close" size={14} />
+        </button>
       </div>
       <div className="flex flex-col gap-2">
         {files.map(f => {
@@ -786,9 +1373,9 @@ const FilesPopup: React.FC<{ files: EventFile[]; onClose: () => void }> = ({ fil
           return (
             <a key={f.id} href={href} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-neutral-50 hover:bg-brand-50 border border-neutral-100 hover:border-brand-200 transition-colors group">
-              <span className="text-xl flex-shrink-0">{isImage ? '🖼️' : '📄'}</span>
+              <Icon name={isImage ? 'image' : 'file'} size={16} className="text-neutral-500 flex-shrink-0" />
               <span className="text-xs text-neutral-700 group-hover:text-brand-700 truncate flex-1">{f.originalName}</span>
-              <span className="text-[10px] text-neutral-400 flex-shrink-0">↗</span>
+              <Icon name="external" size={12} className="text-neutral-400 flex-shrink-0" />
             </a>
           );
         })}
@@ -799,61 +1386,158 @@ const FilesPopup: React.FC<{ files: EventFile[]; onClose: () => void }> = ({ fil
 
 const CalendarEvent: React.FC<{
   event: CalEvent;
+  layout?: { leftPct: number; widthPct: number };
   onClick: () => void;
   onMouseDown: (e: React.MouseEvent, type: 'move' | 'resize') => void;
   onEdit: () => void;
   onReturnToBank?: () => void;
   onDelete: () => void;
   onAddToMap: () => void;
-}> = ({ event: ev, onClick, onMouseDown, onEdit, onReturnToBank, onDelete, onAddToMap }) => {
+}> = ({ event: ev, layout, onClick, onMouseDown, onEdit, onReturnToBank, onDelete, onAddToMap }) => {
   const [showFiles, setShowFiles] = useState(false);
   const top    = minToY(ev.startMinute);
   const height = Math.max(20, Math.min(ev.durationMins * PX_PER_MIN, GRID_H - top));
   const c      = col(ev.color);
+
+  // Debug: log layout for events that should have one
+  if (layout && (layout.leftPct !== 0 || layout.widthPct !== 100)) {
+    console.log('[event-layout]', ev.id.slice(0, 12), ev.title.slice(0, 20), '→', layout);
+  }
   const short  = height < 44;  // title only
   const tall   = height >= 76; // title + icons + time + notes
-  const btnCls = 'text-sm leading-none hover:bg-black/10 rounded px-1 py-0.5 flex-shrink-0';
+  const narrow = layout && layout.widthPct < 100; // overlapping with others
+  const hoursIssue =
+    ev.scheduleSeverity ||
+    (ev.scheduleWarnings?.some((w) => w.severity === 'critical')
+      ? 'critical'
+      : ev.scheduleWarnings?.length
+        ? 'warn'
+        : null);
+  const hoursBorder =
+    hoursIssue === 'critical'
+      ? 'ring-2 ring-red-500 border-red-500'
+      : hoursIssue === 'warn'
+        ? 'ring-2 ring-amber-400 border-amber-400'
+        : '';
+  const hoursTitle = ev.scheduleWarnings?.map((w) => w.message).join('\n');
+  const isDraft = String(ev.id).startsWith('draft-');
 
   return (
     <div
-      className={`cal-event absolute inset-x-0.5 rounded-lg border ${c.event} ${c.border} ${c.text} overflow-hidden cursor-grab active:cursor-grabbing transition-all select-none`}
-      style={{ top, height }}
+      className={`cal-event absolute rounded-lg border ${c.event} ${c.border} ${c.text} overflow-hidden cursor-grab active:cursor-grabbing transition-all select-none ${hoursBorder} ${
+        isDraft ? 'border-dashed border-purple-500 ring-1 ring-purple-300/80 opacity-95' : ''
+      }`}
+      style={{
+        top,
+        height,
+        left: `calc(${layout?.leftPct ?? 0}% + 2px)`,
+        width: `calc(${layout?.widthPct ?? 100}% - 4px)`,
+      }}
       onClick={onClick}
       onMouseDown={e => onMouseDown(e, 'move')}
+      title={hoursTitle || (isDraft ? 'טיוטת AI — טרם נשמר' : undefined)}
     >
+      {isDraft && (
+        <span className="absolute top-0.5 right-0.5 z-10 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-600 text-white shadow-sm">
+          AI
+        </span>
+      )}
+      {hoursIssue && (
+        <span
+          className={`absolute top-0.5 left-0.5 z-10 inline-flex items-center justify-center w-5 h-5 rounded-md shadow-sm ${
+            hoursIssue === 'critical' ? 'bg-red-500 text-white' : 'bg-amber-400 text-amber-950'
+          }`}
+          title={hoursTitle || undefined}
+        >
+          <Icon name="alert" size={12} />
+        </span>
+      )}
       <div className="px-1.5 pt-0.5 pb-3 leading-tight flex flex-col gap-0.5">
         {/* Title + cost */}
         <div className="flex items-start justify-between gap-1">
           <p className="text-xs font-semibold truncate flex-1">{ev.title}</p>
-          {ev.cost && !short && <span className="text-[10px] font-medium opacity-75 flex-shrink-0">💰{ev.cost}</span>}
+          {ev.cost && !short && !narrow && <span className="text-[10px] font-medium opacity-75 flex-shrink-0">{ev.cost}</span>}
         </div>
         {/* Time row */}
-        {tall && <p className="text-xs opacity-60">{fmtMin(ev.startMinute)} – {fmtMin(ev.startMinute + ev.durationMins)}</p>}
-        {/* Icons row — always visible when not short */}
-        {!short && (
-          <div className="flex items-center gap-0.5 flex-wrap mt-0.5" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+        {tall && (
+          <p className="text-xs opacity-60 inline-flex items-center gap-1">
+            <Icon name="clock" size={11} className="opacity-70" />
+            {fmtMin(ev.startMinute)} – {fmtMin(ev.startMinute + ev.durationMins)}
+          </p>
+        )}
+        {/* Soft modern action chips */}
+        {!short && !narrow && (
+          <div
+            className="flex items-center gap-1 flex-wrap mt-1"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             {ev.url?.trim() && (
-              <a href={ev.url} target="_blank" rel="noopener noreferrer" className={btnCls}>🔗</a>
+              <a href={ev.url} target="_blank" rel="noopener noreferrer" title="קישור" className={iconBtn}>
+                <Icon name="link" size={14} />
+              </a>
             )}
             {ev.mapsUrl?.trim() && (
-              <a href={ev.mapsUrl} target="_blank" rel="noopener noreferrer" className={btnCls}>🗺️</a>
+              <a href={ev.mapsUrl} target="_blank" rel="noopener noreferrer" title="מפה" className={iconBtn}>
+                <Icon name="map" size={14} />
+              </a>
             )}
             {ev.files && ev.files.length === 1 && (
-              <a href={`/uploads/planner/${ev.files[0].filename}`} target="_blank" rel="noopener noreferrer" className={btnCls} title={ev.files[0].originalName}>📎</a>
+              <a
+                href={`/uploads/planner/${ev.files[0].filename}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={iconBtn}
+                title={ev.files[0].originalName}
+              >
+                <Icon name="paperclip" size={14} />
+              </a>
             )}
             {ev.files && ev.files.length > 1 && (
-              <button onClick={e => { e.stopPropagation(); setShowFiles(true); }} onMouseDown={e => e.stopPropagation()} title="קבצים מצורפים" className={btnCls}>📎{ev.files.length}</button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowFiles(true); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                title="קבצים מצורפים"
+                className={`${iconBtn} gap-0.5 text-[10px] font-semibold tabular-nums`}
+              >
+                <Icon name="paperclip" size={14} />
+                {ev.files.length}
+              </button>
             )}
-            <button onClick={e => { e.stopPropagation(); onAddToMap(); }} onMouseDown={e => e.stopPropagation()} title="הוסף למפה" className={btnCls}>📍</button>
-            <button onClick={e => { e.stopPropagation(); onEdit(); }} onMouseDown={e => e.stopPropagation()} className={btnCls}>✏️</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onAddToMap(); }} onMouseDown={(e) => e.stopPropagation()} title="הוסף למפה" className={iconBtn}>
+              <Icon name="pin" size={14} />
+            </button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(); }} onMouseDown={(e) => e.stopPropagation()} title="עריכה" className={iconBtn}>
+              <Icon name="edit" size={14} />
+            </button>
             {onReturnToBank && (
-              <button onClick={e => { e.stopPropagation(); onReturnToBank(); }} onMouseDown={e => e.stopPropagation()} title="החזר לבנק" className={btnCls}>↩️</button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onReturnToBank(); }} onMouseDown={(e) => e.stopPropagation()} title="החזר לבנק" className={iconBtn}>
+                <Icon name="undo" size={14} />
+              </button>
             )}
-            <button onClick={e => { e.stopPropagation(); if (confirm(ev.activityId ? 'למחוק אירוע ופעילות לצמיתות?' : 'למחוק אירוע?')) onDelete(); }} onMouseDown={e => e.stopPropagation()} className={btnCls}>🗑️</button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(ev.activityId ? 'למחוק אירוע ופעילות לצמיתות?' : 'למחוק אירוע?')) onDelete();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="מחק"
+              className={iconBtnDanger}
+            >
+              <Icon name="trash" size={13} />
+            </button>
           </div>
         )}
         {/* Notes */}
         {tall && ev.notes?.trim() && <p className="text-xs opacity-60 line-clamp-2">{ev.notes}</p>}
+        {tall && hoursIssue && ev.scheduleWarnings?.[0] && (
+          <p className={`text-[10px] font-medium line-clamp-2 inline-flex items-start gap-1 ${hoursIssue === 'critical' ? 'text-red-700' : 'text-amber-800'}`}>
+            <Icon name="alert" size={11} className="mt-0.5 flex-shrink-0" />
+            <span>{ev.scheduleWarnings[0].message}</span>
+          </p>
+        )}
       </div>
       {/* Resize handle */}
       <div
@@ -1010,11 +1694,13 @@ const EventModal: React.FC<{
   defaultUrl?: string;
   defaultMapsUrl?: string;
   defaultCost?: string;
+  defaultCategory?: string;
+  defaultLocation?: string;
   days: string[];
   onSave: (data: any) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onClose: () => void;
-}> = ({ tripId, event, defaultDate, defaultStartMinute, defaultTitle, defaultColor, defaultDuration, defaultActivityId, defaultUrl, defaultMapsUrl, defaultCost, days, onSave, onDelete, onClose }) => {
+}> = ({ tripId, event, defaultDate, defaultStartMinute, defaultTitle, defaultColor, defaultDuration, defaultActivityId, defaultUrl, defaultMapsUrl, defaultCost, defaultCategory, defaultLocation, days, onSave, onDelete, onClose }) => {
   const initStart  = event?.startMinute ?? defaultStartMinute ?? 540;
   const initDur    = event?.durationMins ?? defaultDuration ?? 60;
   const initEnd    = initStart + initDur;
@@ -1034,13 +1720,57 @@ const EventModal: React.FC<{
   const [files,   setFiles]   = useState<EventFile[]>(event?.files ?? []);
   const [saving,  setSaving]  = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [serverWarnings, setServerWarnings] = useState<ScheduleWarning[]>(event?.scheduleWarnings ?? []);
+  const [checkingHours, setCheckingHours] = useState(false);
 
-  const startMinute = parseInt(startH) * 60 + parseInt(startM);
-  const endMinute   = parseInt(endH)   * 60 + parseInt(endM);
+  const startMinute = (parseInt(startH, 10) || 0) * 60 + (parseInt(startM, 10) || 0);
+  const endMinute   = (parseInt(endH, 10) || 0) * 60 + (parseInt(endM, 10) || 0);
   const durationMins = Math.max(15, endMinute > startMinute ? endMinute - startMinute : 60);
+
+  // Live Google + heuristics check whenever schedule fields change
+  useEffect(() => {
+    if (!tripId || !title.trim() || !date || allDay) {
+      setServerWarnings([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      setCheckingHours(true);
+      try {
+        const { data } = await apiClient.post(`/api/planner/${tripId}/check-hours`, {
+          title: title.trim(),
+          date,
+          startMinute,
+          durationMins,
+          allDay: false,
+          activityId: event?.activityId ?? defaultActivityId,
+          mapsUrl: mapsUrl.trim() || null,
+          location: defaultLocation || null,
+          category: defaultCategory || null,
+        });
+        if (!cancelled) setServerWarnings(data.scheduleWarnings ?? []);
+      } catch {
+        if (!cancelled) setServerWarnings([]);
+      } finally {
+        if (!cancelled) setCheckingHours(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [tripId, title, date, startMinute, durationMins, allDay, mapsUrl, event?.activityId, defaultActivityId, defaultCategory, defaultLocation]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
+    if (serverWarnings.some((w) => w.severity === 'critical')) {
+      const ok = window.confirm(
+        '🚫 המקום כנראה סגור בזמן הזה:\n\n' +
+          serverWarnings.map((w) => '• ' + w.message).join('\n\n') +
+          '\n\nלשמור בכל זאת?',
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       await onSave({
@@ -1050,6 +1780,8 @@ const EventModal: React.FC<{
         durationMins: allDay ? 1440 : durationMins,
         color, notes: notes.trim() || null, url: url.trim() || null,
         mapsUrl: mapsUrl.trim() || null, cost: cost.trim() || null,
+        category: defaultCategory,
+        location: defaultLocation,
       });
     } finally { setSaving(false); }
   };
@@ -1079,9 +1811,45 @@ const EventModal: React.FC<{
   const timeInput = 'flex items-center gap-1 border border-neutral-200 rounded-xl px-3 py-2' as const;
   const inp = 'border border-neutral-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-500' as const;
 
+  const critical = serverWarnings.some((w) => w.severity === 'critical');
+  const showClosedBanner = serverWarnings.length > 0;
+
   return (
     <ModalOverlay onClose={onClose}>
       <h2 className="text-lg font-bold text-neutral-900 mb-4">{event ? 'עריכת אירוע' : 'אירוע חדש'}</h2>
+      {checkingHours && (
+        <p className="mb-2 text-xs text-neutral-400">בודק שעות פתיחה מול Google…</p>
+      )}
+      {showClosedBanner && (
+        <div
+          className={`mb-3 rounded-xl border px-3 py-2.5 text-xs leading-relaxed ${
+            critical
+              ? 'border-red-400 bg-red-50 text-red-900'
+              : 'border-amber-300 bg-amber-50 text-amber-950'
+          }`}
+        >
+          <p className="font-bold mb-1 text-sm">
+            {critical ? '🚫 המקום סגור בזמן הזה' : '⚠️ שימו לב לשעות פתיחה'}
+          </p>
+          {serverWarnings.map((w, i) => (
+            <p key={i} className="mb-1 last:mb-0">
+              {w.message}
+              {w.hoursSummary && (
+                <span className="block text-[11px] opacity-80 mt-0.5">שעות: {w.hoursSummary}</span>
+              )}
+              <span className="text-[10px] opacity-60">
+                {' '}
+                ({w.source === 'google' ? 'Google' : 'הערכה'})
+              </span>
+            </p>
+          ))}
+          <p className="mt-1.5 text-[11px] opacity-80">
+            {critical
+              ? 'מומלץ לשנות יום/שעה. אם תשמרו — תישלח התראה לקבוצה.'
+              : 'כדאי לוודא לפני היציאה.'}
+          </p>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="כותרת *" className={inp} />
 
@@ -1174,8 +1942,14 @@ const EventModal: React.FC<{
           <button onClick={() => { if (confirm('למחוק אירוע?')) onDelete(event.id); }} className="text-sm text-red-400 px-3 py-2 rounded-xl hover:bg-red-50">מחק</button>
         )}
         <button onClick={onClose} className="flex-1 text-sm text-neutral-600 border border-neutral-200 rounded-xl py-2.5">ביטול</button>
-        <button onClick={handleSave} disabled={saving || !title.trim()} className="flex-1 text-sm font-bold bg-brand-500 text-white rounded-xl py-2.5 disabled:opacity-50 hover:bg-brand-600">
-          {saving ? 'שומר...' : 'שמור'}
+        <button
+          onClick={handleSave}
+          disabled={saving || !title.trim()}
+          className={`flex-1 text-sm font-bold text-white rounded-xl py-2.5 disabled:opacity-50 ${
+            critical ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
+          }`}
+        >
+          {saving ? 'שומר...' : critical ? '🚫 שמור בכל זאת' : 'שמור'}
         </button>
       </div>
     </ModalOverlay>

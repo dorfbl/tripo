@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTripStore } from '../store/tripStore';
+import { useActiveTripStore } from '../store/activeTripStore';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { tripTabPath } from '../lib/tripNav';
 import axios from 'axios';
 
 export const CreateTripPage: React.FC = () => {
@@ -14,6 +16,7 @@ export const CreateTripPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { createTrip } = useTripStore();
+  const { setActiveTrip, setLastTab } = useActiveTripStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,7 +25,9 @@ export const CreateTripPage: React.FC = () => {
     setLoading(true);
     try {
       const trip = await createTrip(name, startDate || undefined, endDate || undefined);
-      navigate(`/trip/${trip.id}`);
+      setActiveTrip(trip.id, trip.name);
+      setLastTab('home');
+      navigate(tripTabPath(trip.id, 'home'));
     } catch (err) {
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.error || 'שגיאה ביצירת הטיול');

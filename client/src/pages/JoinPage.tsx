@@ -22,6 +22,7 @@ export const JoinPage: React.FC = () => {
   const join = async () => {
     try {
       const res = await apiClient.post(`/api/trips/join/${inviteCode}`);
+      // TripRedirect will send user to last used tab
       navigate(`/trip/${res.data.trip.id}`);
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 400) {

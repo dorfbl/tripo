@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui/Card';
@@ -6,15 +6,30 @@ import { useAuthStore } from '../store/authStore';
 import { useActiveTripStore } from '../store/activeTripStore';
 
 export const ProfilePage: React.FC = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateProfile } = useAuthStore();
   const { activeTripName, clearActiveTrip } = useActiveTripStore();
   const navigate = useNavigate();
+  const [savingAi, setSavingAi] = useState(false);
 
   const handleLogout = () => {
     logout();
     clearActiveTrip();
     navigate('/login', { replace: true });
   };
+
+  const toggleAi = async () => {
+    if (!user || savingAi) return;
+    setSavingAi(true);
+    try {
+      await updateProfile({ aiEnabled: !(user.aiEnabled !== false) });
+    } catch {
+      /* ignore */
+    } finally {
+      setSavingAi(false);
+    }
+  };
+
+  const aiOn = user?.aiEnabled !== false;
 
   const initials = user?.name
     ? user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
@@ -48,8 +63,69 @@ export const ProfilePage: React.FC = () => {
           </div>
         </Card>
 
+        {/* הגדרות AI */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-neutral-900">🤖 עוזר AI</p>
+              <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">
+                סיכומי ציר זמן והתראות חכמות. אפשר לכבות בכל עת.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAi}
+              disabled={savingAi}
+              className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ${
+                aiOn ? 'bg-brand-500' : 'bg-neutral-200'
+              } disabled:opacity-50`}
+              aria-pressed={aiOn}
+            >
+              <span
+                className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${
+                  aiOn ? 'right-0.5' : 'right-5'
+                }`}
+              />
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-400 mt-2">
+            {aiOn ? 'AI פעיל עבורך' : 'AI כבוי עבורך'} · דורש גם הפעלה ברמת הטיול
+          </p>
+        </Card>
+
         {/* פעולות */}
         <Card className="overflow-hidden divide-y divide-neutral-100">
+
+          <button
+            onClick={() => navigate('/notifications')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors"
+          >
+            <span className="text-sm font-medium text-neutral-800">🔔 התראות</span>
+            <span className="text-neutral-300 text-lg">‹</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/subscription')}
+            className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors"
+          >
+            <span className="text-sm font-medium text-neutral-800">
+              💎 מנוי ומכסות
+              {user?.plan && user.plan !== 'FREE' && (
+                <span className="text-xs text-brand-500 font-bold mr-2">{user.plan}</span>
+              )}
+            </span>
+            <span className="text-neutral-300 text-lg">‹</span>
+          </button>
+
+          {user?.email?.toLowerCase() === 'dorfbl@gmail.com' && (
+            <button
+              onClick={() => navigate('/admin/plans')}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-amber-50 transition-colors"
+            >
+              <span className="text-sm font-medium text-amber-800">🛡️ ניהול מנויים (סופר־אדמין)</span>
+              <span className="text-neutral-300 text-lg">‹</span>
+            </button>
+          )}
 
           {/* עריכת פרופיל */}
           <button

@@ -8,6 +8,9 @@ import {
   createEvent, updateEvent, deleteEvent,
   uploadEventFile, deleteEventFile,
   getMyVotes, getVotes, submitVotes,
+  checkHours,
+  generateAiScheduleDraft,
+  applyAiSchedule,
 } from '../controllers/planner.controller';
 
 const router = Router();
@@ -30,6 +33,9 @@ const upload = multer({
 });
 
 router.get('/:tripId',                                          getPlanner);
+router.post('/:tripId/check-hours',                             checkHours);
+router.post('/:tripId/ai-schedule',                             generateAiScheduleDraft);
+router.post('/:tripId/ai-schedule/apply',                       applyAiSchedule);
 router.post('/:tripId/activities/bulk',                         bulkCreateActivities);
 router.post('/:tripId/activities',                              createActivity);
 router.put('/:tripId/activities/:actId',                        updateActivity);

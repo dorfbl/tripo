@@ -1,6 +1,8 @@
 import React from 'react';
 import { Navbar, TripTopBar } from './Navbar';
 import { BottomNav } from './BottomNav';
+import { OfflineChip } from './OfflineChip';
+import { useTripRouteSync } from '../../hooks/useTripRouteSync';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -22,6 +24,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   showBottomNav,
   noPadding,
 }) => {
+  // Keep activeTripStore + tripStore aligned with /trip/:id in the URL
+  useTripRouteSync();
 
   // ─── מפה — fullscreen עם TopBar ו-BottomNav ──────────────────────────────────
   if (noPadding && showBottomNav) {
@@ -29,6 +33,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       <div className="min-h-dvh bg-white relative pt-14">
         <TripTopBar />
         {children}
+        <OfflineChip />
         <BottomNav />
       </div>
     );
@@ -42,6 +47,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <main className={`${widths[maxWidth]} mx-auto px-4 pt-5 pb-32 w-full flex-1 mt-14`}>
           {children}
         </main>
+        <OfflineChip />
         <BottomNav />
       </div>
     );

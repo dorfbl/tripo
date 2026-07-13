@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Avatar } from '../ui/Avatar';
+import { NotificationBell } from './NotificationBell';
 
 export const Navbar: React.FC = () => {
   const { user } = useAuthStore();
@@ -14,10 +15,13 @@ export const Navbar: React.FC = () => {
           TRIPO ✈️
         </Link>
         {user && (
-          <button onClick={() => navigate('/profile')} className="flex items-center gap-2">
-            <span className="text-sm text-neutral-500 hidden sm:block">{user.name}</span>
-            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => navigate('/profile')} className="flex items-center gap-2">
+              <span className="text-sm text-neutral-500 hidden sm:block">{user.name}</span>
+              <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+            </button>
+          </div>
         )}
       </div>
     </header>
@@ -35,9 +39,12 @@ export const TripTopBar: React.FC = () => {
           TRIPO ✈️
         </Link>
         {user && (
-          <button onClick={() => navigate('/profile')} className="active:opacity-70">
-            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
-          </button>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => navigate('/profile')} className="active:opacity-70">
+              <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
+            </button>
+          </div>
         )}
       </div>
     </header>

@@ -7,12 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PlanTier {
+  FREE
+  PRO
+  BUSINESS
+}
+
 model User {
   id           String   @id @default(uuid())
   name         String
   email        String   @unique
   passwordHash String
   avatarUrl    String?
+  /// Personal preference: use AI for timeline polish + smart notifications
+  aiEnabled    Boolean  @default(true)
+  /// Subscription tier
+  plan         PlanTier @default(FREE)
+  planExpiresAt DateTime?
+  /// Total uploaded file bytes attributed to this user
+  storageBytesUsed BigInt @default(0)
   createdAt    DateTime @default(now())
 
   trips                 TripMember[]
@@ -21,6 +34,53 @@ model User {
   decisionsCreated      Decision[]             @relation("DecisionsCreated")
   decisionVotes         DecisionVote[]         @relation("DecisionVotesByUser")
   linksCreated          TripLink[]             @relation("LinksCreated")
+  timelineEvents        TimelineEvent[]        @relation("TimelineCreatedBy")
+  flightsCreated        TripFlight[]           @relation("FlightsCreated")
+  notifications         Notification[]
+  usageMonths           UsageMonth[]
+  biometricCredentials  BiometricCredential[]
+}
+
+model BiometricCredential {
+  id          String   @id @default(uuid())
+  userId      String
+  credentialId String  @unique
+  publicKey   String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Monthly usage counters (AI calls, etc.)
+model UsageMonth {
+  id        String   @id @default(uuid())
+  userId    String
+  /// Format YYYY-MM
+  period    String
+  aiCalls   Int      @default(0)
+  /// Optional: bytes uploaded this month
+  storageBytesAdded BigInt @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period])
+  @@index([userId])
+}
+
+/// Super-admin editable plan limits (overrides defaults in code)
+model PlanConfig {
+  id                  String  @id // FREE | PRO | BUSINESS
+  nameHe              String
+  maxTrips            Int
+  maxMembersPerTrip   Int
+  maxAiCallsPerMonth  Int
+  maxStorageBytes     BigInt
+  aiIncluded          Boolean @default(true)
+  updatedAt           DateTime @updatedAt
 }
 
 model Trip {
@@ -32,6 +92,8 @@ model Trip {
   inviteCode      String     @unique @default(uuid())
   defaultCurrency String     @default("ILS")
   ownerId         String     @default("")
+  /// Trip-level AI switch (admin). When false, no AI for this trip.
+  aiEnabled       Boolean    @default(true)
   createdAt       DateTime   @default(now())
 
   members           TripMember[]
@@ -39,8 +101,12 @@ model Trip {
   places            TripPlace[]
   decisions         Decision[]
   links             TripLink[]
+  items             TripItem[]
   plannerActivities PlannerActivity[]
   plannerEvents     PlannerEvent[]
+  timelineEvents    TimelineEvent[]
+  flights           TripFlight[]
+  notifications     Notification[]
 }
 
 enum TripStatus {
@@ -100,10 +166,42 @@ model ExpenseParticipant {
   @@unique([expenseId, userId])
 }
 
+// ===== מקור אחיד למקומות / פעילויות / אירועים =====
+
+model TripItem {
+  id           String   @id @default(uuid())
+  tripId       String
+  kind         String   @default("activity")
+  name         String
+  description  String?
+  category     String   @default("other")
+  mapsUrl      String?
+  url          String?
+  location     String?
+  lat          Float?
+  lng          Float?
+  emoji        String   @default("📌")
+  color        String   @default("blue")
+  cost         String?
+  durationMins Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trip              Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  places            TripPlace[]
+  plannerActivities PlannerActivity[]
+  plannerEvents     PlannerEvent[]
+
+  @@index([tripId])
+  @@index([tripId, name])
+  @@index([tripId, mapsUrl])
+}
+
 // ===== מפת טיול =====
 
 model TripPlace {
   id        String   @id @default(uuid())
+  itemId    String?
   tripId    String
   name      String
   lat       Float
@@ -116,7 +214,10 @@ model TripPlace {
   createdAt DateTime @default(now())
 
   trip      Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  item      TripItem?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
   photos    PlacePhoto[]
+
+  @@index([itemId])
 }
 
 model PlacePhoto {
@@ -262,6 +363,7 @@ model DecisionVote {
 
 model PlannerActivity {
   id           String   @id @default(uuid())
+  itemId       String?
   tripId       String
   name         String
   emoji        String   @default("📌")
@@ -276,9 +378,12 @@ model PlannerActivity {
   createdAt    DateTime @default(now())
 
   trip   Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  item   TripItem?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
   events PlannerEvent[]
   files  PlannerActivityFile[]
   votes  PlannerActivityVote[]
+
+  @@index([itemId])
 }
 
 model PlannerActivityVote {
@@ -310,6 +415,7 @@ model PlannerActivityFile {
 
 model PlannerEvent {
   id           String   @id @default(uuid())
+  itemId       String?
   tripId       String
   activityId   String?
   title        String
@@ -326,8 +432,11 @@ model PlannerEvent {
   updatedAt    DateTime @updatedAt
 
   trip     Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  item     TripItem?          @relation(fields: [itemId], references: [id], onDelete: SetNull)
   activity PlannerActivity?   @relation(fields: [activityId], references: [id], onDelete: SetNull)
   files    PlannerEventFile[]
+
+  @@index([itemId])
 }
 
 model PlannerEventFile {
@@ -340,4 +449,97 @@ model PlannerEventFile {
   createdAt    DateTime @default(now())
 
   event PlannerEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+// ===== טיסות =====
+
+model TripFlight {
+  id                String    @id @default(uuid())
+  tripId            String
+  flightNumber      String
+  flightDate        DateTime?
+  direction         String    @default("outbound") // outbound | return | other
+  airline           String?
+  departureAirport  String?
+  arrivalAirport    String?
+  departureAt       DateTime?
+  arrivalAt         DateTime?
+  notes             String?
+  liveData          Json?
+  liveFetchedAt     DateTime?
+  createdByUserId   String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User @relation("FlightsCreated", fields: [createdByUserId], references: [id])
+
+  @@index([tripId])
+  @@index([tripId, flightNumber])
+}
+
+// ===== ציר זמן =====
+
+enum TimelineEventType {
+  MEMBER_JOINED
+  DECISION_CLOSED
+  LINK_ADDED
+  PLACE_ADDED
+  EXPENSE_ADDED
+  PHOTO_UPLOADED
+  MEMORY
+  AI_RECAP
+  AI_NOTE
+}
+
+model TimelineEvent {
+  id              String            @id @default(uuid())
+  tripId          String
+  type            TimelineEventType
+  /// UI filter bucket: expenses | places | photos | decisions | documents | members | memory | ai
+  category        String
+  title           String
+  description     String?
+  emoji           String            @default("📌")
+  isPrivate       Boolean           @default(false)
+  /// True when title/description was written or polished by AI
+  aiGenerated     Boolean           @default(false)
+  createdByUserId String?
+  refType         String?
+  refId           String?
+  metadata        Json?
+  occurredAt      DateTime          @default(now())
+  createdAt       DateTime          @default(now())
+
+  trip      Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("TimelineCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tripId, occurredAt])
+  @@index([tripId, category])
+  @@index([tripId, type])
+}
+
+// ===== התראות =====
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  tripId    String?
+  type      String   @default("system") // system | ai | decision | expense | member | memory | flight
+  title     String
+  body      String?
+  emoji     String   @default("🔔")
+  href      String?
+  isRead    Boolean  @default(false)
+  /// True when text was AI-generated/polished
+  aiGenerated Boolean @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@index([tripId])
 }

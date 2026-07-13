@@ -1,6 +1,13 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { timelineMemberJoined } from '../services/timeline.service';
+import {
+  assertCanAddMember,
+  assertCanCreateTrip,
+  LimitError,
+  limitErrorPayload,
+} from '../services/limits.service';
 
 export const createTrip = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -10,6 +17,8 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
       res.status(400).json({ error: 'שם הטיול הוא שדה חובה' });
       return;
     }
+
+    await assertCanCreateTrip(req.userId!);
 
     const trip = await prisma.trip.create({
       data: {
@@ -31,8 +40,21 @@ export const createTrip = async (req: AuthRequest, res: Response): Promise<void>
       },
     });
 
+    const creator = trip.members.find((m) => m.userId === req.userId);
+    if (creator) {
+      await timelineMemberJoined({
+        tripId: trip.id,
+        userId: creator.userId,
+        userName: creator.user.name,
+      });
+    }
+
     res.status(201).json({ trip });
   } catch (err) {
+    if (err instanceof LimitError) {
+      res.status(err.status).json(limitErrorPayload(err));
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'שגיאה ביצירת הטיול' });
   }
@@ -109,13 +131,28 @@ export const joinTrip = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
+    await assertCanAddMember(trip.id, req.userId!);
+
     const member = await prisma.tripMember.create({
       data: { userId: req.userId!, tripId: trip.id, role: 'MEMBER' },
-      include: { trip: true },
+      include: {
+        trip: true,
+        user: { select: { id: true, name: true } },
+      },
+    });
+
+    await timelineMemberJoined({
+      tripId: trip.id,
+      userId: member.userId,
+      userName: member.user.name,
     });
 
     res.status(201).json({ message: 'הצטרפת לטיול בהצלחה!', trip: member.trip });
   } catch (err) {
+    if (err instanceof LimitError) {
+      res.status(err.status).json(limitErrorPayload(err));
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'שגיאה בהצטרפות לטיול' });
   }
@@ -124,7 +161,7 @@ export const joinTrip = async (req: AuthRequest, res: Response): Promise<void> =
 export const updateTrip = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const id = req.params['id'] as string;
-    const { name, startDate, endDate, status } = req.body;
+    const { name, startDate, endDate, status, aiEnabled } = req.body;
 
     const member = await prisma.tripMember.findUnique({
       where: { userId_tripId: { userId: req.userId!, tripId: id } },
@@ -148,6 +185,7 @@ export const updateTrip = async (req: AuthRequest, res: Response): Promise<void>
         ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
         ...(endDate   !== undefined && { endDate:   endDate   ? new Date(endDate)   : null }),
         ...(status    !== undefined && { status: status as any }),
+        ...(aiEnabled !== undefined && { aiEnabled: Boolean(aiEnabled) }),
       },
       include: {
         members: {

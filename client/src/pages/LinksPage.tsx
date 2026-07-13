@@ -178,7 +178,7 @@ export const LinksPage: React.FC = () => {
   const { id: tripId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentTrip } = useTripStore();
+  const { currentTrip, loadTrip } = useTripStore();
 
   const [links, setLinks] = useState<TripLink[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,12 +188,18 @@ export const LinksPage: React.FC = () => {
   const [statusModal, setStatusModal] = useState<TripLink | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const myMember = currentTrip?.members.find(m => m.userId === user?.id);
+  // Only trust currentTrip when it matches the URL trip
+  const trip = currentTrip?.id === tripId ? currentTrip : null;
+  const myMember = trip?.members.find(m => m.userId === user?.id);
   const isAdmin = myMember?.role === 'ADMIN';
 
   const load = useCallback(async () => {
     if (!tripId) return;
     try {
+      // Ensure trip context matches URL (deep-links from notifications)
+      if (useTripStore.getState().currentTrip?.id !== tripId) {
+        await loadTrip(tripId);
+      }
       const { data } = await apiClient.get<TripLink[]>(`/api/links/${tripId}`);
       setLinks(data);
     } catch {
@@ -201,9 +207,13 @@ export const LinksPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, loadTrip]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setLoading(true);
+    setLinks([]); // clear previous trip's links immediately
+    load();
+  }, [load]);
 
   const filtered = links.filter(l => {
     const matchesSearch = !search || l.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -255,6 +265,12 @@ export const LinksPage: React.FC = () => {
   return (
     <AppShell showBottomNav>
       <div>
+        <div className="mb-3">
+          <h1 className="text-xl font-bold text-neutral-900">🔗 קישורים והזמנות</h1>
+          {trip?.name && (
+            <p className="text-xs text-brand-600 font-medium mt-0.5">✈️ {trip.name}</p>
+          )}
+        </div>
         {/* Search + new button */}
         <div className="flex gap-2 mb-3">
           <div className="flex-1 relative">

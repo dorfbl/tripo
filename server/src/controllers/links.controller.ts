@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import fs from 'fs';
 import path from 'path';
+import { timelineLinkAdded } from '../services/timeline.service';
 
 const VALID_TYPES = ['FLIGHT','HOTEL','CAR','ACTIVITY','RESTAURANT','BAR','MAP','INSURANCE','DOCUMENT','PAYMENT','OTHER'];
 const VALID_STATUSES = ['SAVED','PENDING','BOOKED','PAID','MISSING','CANCELLED'];
@@ -74,6 +75,16 @@ export const createLink = async (req: AuthRequest, res: Response) => {
         createdByUserId: userId,
       },
       include: { createdBy: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+
+    await timelineLinkAdded({
+      tripId,
+      userId,
+      linkId: link.id,
+      title: link.title,
+      linkType: link.type,
+      isPrivate: link.isPrivate,
+      hasFile: Boolean(link.fileUrl),
     });
 
     res.status(201).json(link);
@@ -235,6 +246,22 @@ export const uploadFile = async (req: AuthRequest, res: Response) => {
     if (!member) return res.status(403).json({ error: 'אין גישה לטיול זה' });
 
     if (!req.file) return res.status(400).json({ error: 'לא נשלח קובץ' });
+
+    const { assertCanUpload, recordStorageDelta, LimitError, limitErrorPayload } =
+      await import('../services/limits.service');
+    try {
+      await assertCanUpload(userId, req.file.size);
+    } catch (err) {
+      if (err instanceof LimitError) {
+        try {
+          const fs = await import('fs');
+          fs.unlinkSync(req.file.path);
+        } catch { /* ignore */ }
+        return res.status(err.status).json(limitErrorPayload(err));
+      }
+      throw err;
+    }
+    await recordStorageDelta(userId, req.file.size);
 
     const fileUrl = `/uploads/links/${req.file.filename}`;
     const fileName = req.file.originalname;

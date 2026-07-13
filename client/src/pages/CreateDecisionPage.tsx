@@ -58,7 +58,7 @@ export const CreateDecisionPage: React.FC = () => {
         isSecretVote,
         hideResultsUntilClosed,
       });
-      navigate(`/trip/${tripId}/decisions`, { state: { newDecisionId: data.id } });
+      navigate(`/trip/${tripId}/plan/decisions`, { state: { newDecisionId: data.id } });
     } catch {
       setError('שגיאה ביצירת ההחלטה');
     } finally {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { PlanSubNav } from '../components/layout/PlanSubNav';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import { useTripStore } from '../store/tripStore';
@@ -649,6 +650,7 @@ export const DecisionsPage: React.FC = () => {
   return (
     <AppShell showBottomNav>
       <div>
+        <PlanSubNav />
 
         {/* Status summary */}
         {decisions.length > 0 && (
@@ -674,7 +676,7 @@ export const DecisionsPage: React.FC = () => {
             ))}
           </div>
           <button
-            onClick={() => navigate(`/trip/${tripId}/decisions/new`)}
+            onClick={() => navigate(`/trip/${tripId}/plan/decisions/new`)}
             className="flex-shrink-0 text-sm font-bold px-3 py-1.5 rounded-full bg-brand-500 text-white active:bg-brand-600"
           >
             + החלטה
@@ -694,7 +696,7 @@ export const DecisionsPage: React.FC = () => {
               יעד, מלון, רכב, אטרקציות, תקציב וכל דבר שצריך עליו תשובה.
             </p>
             <button
-              onClick={() => navigate(`/trip/${tripId}/decisions/new`)}
+              onClick={() => navigate(`/trip/${tripId}/plan/decisions/new`)}
               className="bg-brand-500 text-white font-bold px-6 py-3 rounded-2xl active:bg-brand-600"
             >
               + צור החלטה ראשונה

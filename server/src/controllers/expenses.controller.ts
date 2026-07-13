@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { timelineExpenseAdded } from '../services/timeline.service';
 
 // ─── קטגוריות ─────────────────────────────────────────────────────────────────
 const VALID_CATEGORIES = ['food', 'accommodation', 'transport', 'activities', 'shopping', 'health', 'other', 'repayment'];
@@ -30,28 +31,34 @@ function calcSettlements(
     }
   }
 
-  // מינימום עסקאות — greedy
-  const debtors  = [...bal.values()].filter(b => b.net < -0.01).sort((a, b) => a.net - b.net);
-  const creditors = [...bal.values()].filter(b => b.net >  0.01).sort((a, b) => b.net - a.net);
+  /**
+   * net > 0 → this person overpaid / is owed money → should RECEIVE
+   * net < 0 → this person underpaid / owes money → should PAY
+   *
+   * from = pays, to = receives.
+   */
+  const shouldPay    = [...bal.values()].filter(b => b.net < -0.01).sort((a, b) => a.net - b.net);
+  const shouldReceive = [...bal.values()].filter(b => b.net >  0.01).sort((a, b) => b.net - a.net);
   const settlements: Settlement[] = [];
 
   let i = 0, j = 0;
-  while (i < debtors.length && j < creditors.length) {
-    const debtor   = debtors[i];
-    const creditor = creditors[j];
-    const amount   = Math.min(-debtor.net, creditor.net);
+  while (i < shouldPay.length && j < shouldReceive.length) {
+    const payer    = shouldPay[i];
+    const receiver = shouldReceive[j];
+    const amount   = Math.min(-payer.net, receiver.net);
 
     if (amount > 0.01) {
+      // from = who PAYS, to = who RECEIVES
       settlements.push({
-        from:      { userId: debtor.userId,   name: debtor.name   },
-        to:        { userId: creditor.userId,  name: creditor.name },
+        from:      { userId: payer.userId,    name: payer.name    },
+        to:        { userId: receiver.userId,  name: receiver.name },
         amountILS: Math.round(amount * 100) / 100,
       });
     }
-    debtor.net   += amount;
-    creditor.net -= amount;
-    if (Math.abs(debtor.net)   < 0.01) i++;
-    if (Math.abs(creditor.net) < 0.01) j++;
+    payer.net    += amount;
+    receiver.net -= amount;
+    if (Math.abs(payer.net)    < 0.01) i++;
+    if (Math.abs(receiver.net) < 0.01) j++;
   }
   return settlements;
 }
@@ -139,6 +146,17 @@ export const addExpense = async (req: AuthRequest, res: Response): Promise<void>
         paidBy:       { select: { id: true, name: true, avatarUrl: true } },
         participants: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },
       },
+    });
+
+    await timelineExpenseAdded({
+      tripId,
+      userId: req.userId!,
+      expenseId: expense.id,
+      description: expense.description,
+      amount: expense.amount,
+      currency: expense.currency,
+      amountILS: expense.amountILS,
+      category: expense.category,
     });
 
     res.status(201).json({ expense });

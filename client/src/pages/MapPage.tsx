@@ -440,6 +440,177 @@ const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   );
 };
 
+// ─── PlacesPanel ──────────────────────────────────────────────────────────────
+const MIN_PANEL_HEIGHT = 128;
+const DEFAULT_PANEL_HEIGHT = 312;
+const MAX_PANEL_HEIGHT = 620;
+
+interface PlacesPanelProps {
+  places: Place[];
+  tripDays: string[];
+  height: number;
+  onHeightChange: (height: number) => void;
+  onSelect: (place: Place) => void;
+}
+
+const PlacesPanel: React.FC<PlacesPanelProps> = ({ places, tripDays, height, onHeightChange, onSelect }) => {
+  const [search, setSearch] = useState('');
+  const [day, setDay] = useState<'all' | 'none' | string>('all');
+  const [category, setCategory] = useState('all');
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const panelHeight = Math.max(MIN_PANEL_HEIGHT, Math.min(height, MAX_PANEL_HEIGHT));
+  const expanded = panelHeight > 180;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return places
+      .filter(p => {
+        if (!q) return true;
+        return p.name.toLowerCase().includes(q) ||
+          p.notes?.toLowerCase().includes(q) ||
+          getPlaceCategory(p.category).label.toLowerCase().includes(q);
+      })
+      .filter(p => category === 'all' || getPlaceCategory(p.category).id === category)
+      .filter(p => day === 'all' || (day === 'none' ? !p.date : p.date === day))
+      .sort((a, b) => {
+        const ad = a.date ?? '';
+        const bd = b.date ?? '';
+        if (ad !== bd) return ad.localeCompare(bd);
+        return a.order - b.order;
+      });
+  }, [places, search, day, category]);
+
+  const categoryCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    places.forEach(p => {
+      const id = getPlaceCategory(p.category).id;
+      m.set(id, (m.get(id) ?? 0) + 1);
+    });
+    return m;
+  }, [places]);
+
+  const dayCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    places.forEach(p => m.set(p.date ?? 'none', (m.get(p.date ?? 'none') ?? 0) + 1));
+    return m;
+  }, [places]);
+
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startY: e.clientY, startHeight: panelHeight };
+  };
+
+  const dragPanel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const nextHeight = dragRef.current.startHeight + dragRef.current.startY - e.clientY;
+    onHeightChange(Math.max(MIN_PANEL_HEIGHT, Math.min(nextHeight, MAX_PANEL_HEIGHT)));
+  };
+
+  const stopDrag = () => {
+    dragRef.current = null;
+  };
+
+  return (
+    <div className="absolute left-0 right-0 bottom-0 z-[520] pointer-events-none">
+      <div className="bg-white/95 backdrop-blur-sm rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden flex flex-col pointer-events-auto sm:mx-3 sm:mb-3"
+        style={{ height: panelHeight }}>
+        <div className="flex-none px-3 pt-2 pb-2 border-b border-neutral-100">
+          <div
+            className="flex items-center justify-center mb-2 h-6 cursor-ns-resize touch-none"
+            onPointerDown={startDrag}
+            onPointerMove={dragPanel}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}>
+            <span className="w-12 h-1.5 rounded-full bg-neutral-300" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0 text-right">
+              <p className="text-sm font-bold text-neutral-900 leading-tight">מקומות</p>
+              <p className="text-xs text-neutral-400 leading-tight">{filtered.length} מתוך {places.length}</p>
+            </div>
+          </div>
+
+          {expanded && (
+            <>
+              <div className="relative mt-2">
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="חיפוש מקום..."
+                  className="w-full border border-neutral-200 rounded-xl px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
+                {search && (
+                  <button onClick={() => setSearch('')}
+                    className="absolute left-9 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">×</button>
+                )}
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto pt-2 pb-1">
+                <button onClick={() => setDay('all')}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${day === 'all' ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600'}`}>
+                  כל הימים
+                </button>
+                {tripDays.map((date, idx) => (
+                  <button key={date} onClick={() => setDay(date)}
+                    style={day === date ? { background: getDayColor(idx), color: 'white' } : undefined}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${day === date ? '' : 'bg-neutral-100 text-neutral-600'}`}>
+                    {formatDayLabel(date)} {dayCounts.get(date) ? `(${dayCounts.get(date)})` : ''}
+                  </button>
+                ))}
+                {dayCounts.get('none') && (
+                  <button onClick={() => setDay('none')}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${day === 'none' ? 'bg-neutral-800 text-white' : 'bg-neutral-100 text-neutral-600'}`}>
+                    ללא יום ({dayCounts.get('none')})
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                <button onClick={() => setCategory('all')}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${category === 'all' ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600'}`}>
+                  כל הסוגים
+                </button>
+                {PLACE_CATEGORIES.filter(cat => categoryCounts.has(cat.id)).map(cat => (
+                  <button key={cat.id} onClick={() => setCategory(cat.id)}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${category === cat.id ? 'bg-brand-500 text-white' : 'bg-neutral-100 text-neutral-600'}`}>
+                    {cat.label} ({categoryCounts.get(cat.id)})
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          {filtered.length === 0 ? (
+            <div className="flex items-center justify-center h-28 text-sm text-neutral-400">לא נמצאו מקומות</div>
+          ) : (
+            filtered.map((place, idx) => {
+              const dayIdx = tripDays.indexOf(place.date ?? '');
+              const color = dayIdx >= 0 ? getDayColor(dayIdx) : '#9CA3AF';
+              const categoryMeta = getPlaceCategory(place.category);
+              return (
+                <button key={place.id} onClick={() => onSelect(place)}
+                  className="w-full flex items-center gap-3 px-4 py-3 border-b border-neutral-100 text-right hover:bg-neutral-50 active:bg-neutral-100 transition-colors">
+                  <span className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                    style={{ background: color }}>
+                    {idx + 1}
+                  </span>
+                  <CategoryMarkerIcon category={categoryMeta.id} active={false} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-neutral-800 truncate">{place.name}</span>
+                    <span className="block text-xs text-neutral-400 truncate">
+                      {place.date ? formatDayLabel(place.date) : 'ללא יום'} · {categoryMeta.label}
+                      {place.notes ? ` · ${place.notes}` : ''}
+                      {place.photos.length > 0 ? ` · ${place.photos.length} תמונות` : ''}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── ReorderDrawer ────────────────────────────────────────────────────────────
 const ROW_H = 52;
 
@@ -594,6 +765,7 @@ export const MapPage: React.FC = () => {
   const [selected,      setSelected]      = useState<Place | null>(null);
   const [hiddenDays,    setHiddenDays]    = useState<Set<string>>(new Set());
   const [dayFilterOpen, setDayFilterOpen] = useState(false);
+  const [panelHeight,   setPanelHeight]   = useState(DEFAULT_PANEL_HEIGHT);
   const [mapReady,      setMapReady]      = useState(false);
   const mapRef       = useRef<google.maps.Map | null>(null);
   const centeredOnce = useRef(false);
@@ -722,6 +894,12 @@ export const MapPage: React.FC = () => {
     setSelected(prev => prev?.id === placeId ? { ...prev, category } : prev);
   };
 
+  const handleListSelect = (place: Place) => {
+    setSelected(place);
+    mapRef.current?.panTo({ lat: place.lat, lng: place.lng });
+    mapRef.current?.setZoom(14);
+  };
+
   return (
     <AppShell showBottomNav noPadding>
       {/* Full-screen map filling space between topbar and bottomnav */}
@@ -735,9 +913,10 @@ export const MapPage: React.FC = () => {
         {/* Pin count + reorder button — top right */}
         {places.length > 0 && (
           <div className="absolute top-2 right-4 z-[500] flex items-center gap-1.5">
-            <div className="bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow text-xs font-semibold text-neutral-700">
+            <button onClick={() => setPanelHeight(h => h <= 180 ? DEFAULT_PANEL_HEIGHT : MIN_PANEL_HEIGHT)}
+              className="bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow text-xs font-semibold text-neutral-700 active:bg-neutral-100 transition-colors">
               📍 {places.length}
-            </div>
+            </button>
             <button onClick={() => setShowReorder(true)}
               className="w-9 h-9 bg-white/95 backdrop-blur-sm rounded-full shadow flex items-center justify-center text-neutral-500 active:bg-neutral-100 transition-colors">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -778,7 +957,7 @@ export const MapPage: React.FC = () => {
         {tripDays.length > 0 && (
           <>
             {dayFilterOpen && (
-              <div className="absolute z-[600]" style={{ bottom: '60px', left: '12px' }}>
+              <div className="absolute z-[600]" style={{ bottom: `${places.length && !showAdd ? panelHeight + 24 : 60}px`, left: '12px' }}>
                 <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden">
                   <div className="flex border-b border-neutral-100">
                     <button onClick={() => { setHiddenDays(new Set()); fitVisible(places); }}
@@ -808,7 +987,7 @@ export const MapPage: React.FC = () => {
             )}
             <button
               onClick={() => setDayFilterOpen(prev => !prev)}
-              style={{ bottom: '12px', left: '12px' }}
+              style={{ bottom: `${places.length && !showAdd ? panelHeight + 12 : 12}px`, left: '12px' }}
               className={`absolute z-[500] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors ${
                 dayFilterOpen ? 'bg-neutral-800 text-white' : 'bg-white/95 text-neutral-600'
               }`}>
@@ -819,6 +998,16 @@ export const MapPage: React.FC = () => {
               </svg>
             </button>
           </>
+        )}
+
+        {places.length > 0 && !showAdd && (
+          <PlacesPanel
+            places={places}
+            tripDays={tripDays}
+            height={panelHeight}
+            onHeightChange={setPanelHeight}
+            onSelect={handleListSelect}
+          />
         )}
       </div>
 
