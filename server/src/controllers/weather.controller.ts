@@ -18,7 +18,7 @@ export const getTripWeather = async (req: AuthRequest, res: Response): Promise<v
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
       include: {
-        places: { orderBy: { order: 'asc' }, take: 20 },
+        places: { orderBy: { createdAt: 'asc' }, take: 20 },
       },
     });
     if (!trip) {

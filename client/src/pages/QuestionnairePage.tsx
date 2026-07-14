@@ -22,6 +22,9 @@ const CAT_LABELS: Record<string, string> = {
   nature: 'טבע',
   culture: 'תרבות',
   activity: 'פעילות',
+  restaurant: 'מסעדה',
+  hotel: 'לינה',
+  shopping: 'קניות',
   travel: 'נסיעה',
   food: 'אוכל',
   special: 'מיוחד',
@@ -30,7 +33,7 @@ const CAT_LABELS: Record<string, string> = {
   forest: 'טבע',
   munich: 'תרבות',
 };
-const CAT_ORDER = ['nature', 'culture', 'activity', 'travel', 'food', 'special', 'other', 'forest', 'munich'] as const;
+const CAT_ORDER = ['nature', 'culture', 'activity', 'restaurant', 'hotel', 'shopping', 'travel', 'food', 'special', 'other', 'forest', 'munich'] as const;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +41,7 @@ interface ActivityFile { id: string; filename: string; originalName: string; mim
 interface Activity {
   id: string; name: string; emoji: string; location?: string; description?: string;
   durationMins: number; cost?: string; category: string; mapsUrl?: string; url?: string; color: string;
+  rating?: number | null; ratingCount?: number | null;
   files: ActivityFile[];
 }
 interface VoteSummary {
@@ -233,6 +237,12 @@ export const QuestionnairePage: React.FC = () => {
                     <div>
                       <h2 className="text-lg font-bold text-neutral-900 leading-tight">{act.name}</h2>
                       {act.location && <p className="text-sm text-neutral-500 mt-0.5">📍 {act.location}</p>}
+                      {act.rating && (
+                        <p className="text-sm text-neutral-600 mt-0.5">
+                          ⭐ {act.rating.toFixed(1)}
+                          {act.ratingCount && <span className="text-neutral-400"> ({act.ratingCount.toLocaleString()})</span>}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mb-2.5">
@@ -493,6 +503,12 @@ const ResultsView: React.FC<{
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm text-neutral-900 leading-tight">{act.name}</p>
                       {act.location && <p className="text-xs text-neutral-500 mt-0.5">📍 {act.location}</p>}
+                      {act.rating && (
+                        <p className="text-xs text-neutral-600 mt-0.5">
+                          ⭐ {act.rating.toFixed(1)}
+                          {act.ratingCount && <span className="text-neutral-400"> ({act.ratingCount.toLocaleString()})</span>}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         {act.mapsUrl && (
                           <a href={act.mapsUrl} target="_blank" rel="noopener noreferrer"

@@ -36,4 +36,5 @@ export const config = {
     'AVIATION_API_KEY',
     'AVIATION',
   ),
+  clientUrl: process.env.CLIENT_URL || 'https://trip.kefar-sava.co.il',
 };

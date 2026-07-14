@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "TripPlace" ADD COLUMN IF NOT EXISTS "placeId" TEXT;
+ALTER TABLE "TripPlace" ADD COLUMN IF NOT EXISTS "openingHours" JSONB;

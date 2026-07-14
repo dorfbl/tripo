@@ -22,7 +22,7 @@ export async function buildAssistantTips(tripId: string): Promise<AssistantTip[]
     where: { id: tripId },
     include: {
       members: { include: { user: { select: { id: true, name: true } } } },
-      places: { orderBy: { order: 'asc' }, take: 5 },
+      places: { orderBy: { createdAt: 'asc' }, take: 5 },
       decisions: { include: { votes: true } },
       expenses: { orderBy: { expenseDate: 'desc' }, take: 20 },
       links: { where: { type: 'FLIGHT' }, take: 10 },

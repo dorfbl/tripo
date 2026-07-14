@@ -98,15 +98,15 @@ model Trip {
 
   members           TripMember[]
   expenses          TripExpense[]
-  places            TripPlace[]
   decisions         Decision[]
   links             TripLink[]
-  items             TripItem[]
-  plannerActivities PlannerActivity[]
-  plannerEvents     PlannerEvent[]
   timelineEvents    TimelineEvent[]
   flights           TripFlight[]
   notifications     Notification[]
+
+  places            Place[]
+  scheduledEvents   ScheduledEvent[]
+  mapPoints         MapPoint[]
 }
 
 enum TripStatus {
@@ -164,70 +164,6 @@ model ExpenseParticipant {
   user      User        @relation(fields: [userId], references: [id])
 
   @@unique([expenseId, userId])
-}
-
-// ===== מקור אחיד למקומות / פעילויות / אירועים =====
-
-model TripItem {
-  id           String   @id @default(uuid())
-  tripId       String
-  kind         String   @default("activity")
-  name         String
-  description  String?
-  category     String   @default("other")
-  mapsUrl      String?
-  url          String?
-  location     String?
-  lat          Float?
-  lng          Float?
-  emoji        String   @default("📌")
-  color        String   @default("blue")
-  cost         String?
-  durationMins Int?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  trip              Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  places            TripPlace[]
-  plannerActivities PlannerActivity[]
-  plannerEvents     PlannerEvent[]
-
-  @@index([tripId])
-  @@index([tripId, name])
-  @@index([tripId, mapsUrl])
-}
-
-// ===== מפת טיול =====
-
-model TripPlace {
-  id        String   @id @default(uuid())
-  itemId    String?
-  tripId    String
-  name      String
-  lat       Float
-  lng       Float
-  notes     String?
-  mapsUrl   String?
-  date      String?
-  order     Int      @default(0)
-  category  String   @default("other")
-  createdAt DateTime @default(now())
-
-  trip      Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  item      TripItem?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  photos    PlacePhoto[]
-
-  @@index([itemId])
-}
-
-model PlacePhoto {
-  id        String    @id @default(uuid())
-  placeId   String
-  url       String
-  caption   String?
-  createdAt DateTime  @default(now())
-
-  place     TripPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
 }
 
 // ===== קישורים מרוכזים =====
@@ -359,98 +295,6 @@ model DecisionVote {
   @@unique([decisionId, optionId, userId])
 }
 
-// ===== מתכנן טיול =====
-
-model PlannerActivity {
-  id           String   @id @default(uuid())
-  itemId       String?
-  tripId       String
-  name         String
-  emoji        String   @default("📌")
-  location     String?
-  description  String?
-  durationMins Int      @default(60)
-  cost         String?
-  category     String   @default("other")
-  mapsUrl      String?
-  url          String?
-  color        String   @default("blue")
-  createdAt    DateTime @default(now())
-
-  trip   Trip                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  item   TripItem?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  events PlannerEvent[]
-  files  PlannerActivityFile[]
-  votes  PlannerActivityVote[]
-
-  @@index([itemId])
-}
-
-model PlannerActivityVote {
-  id         String   @id @default(uuid())
-  activityId String
-  tripId     String
-  userId     String
-  vote       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
-
-  activity PlannerActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-
-  @@unique([activityId, userId])
-  @@index([tripId])
-}
-
-model PlannerActivityFile {
-  id           String   @id @default(uuid())
-  activityId   String
-  filename     String
-  originalName String
-  mimeType     String   @default("application/octet-stream")
-  size         Int      @default(0)
-  createdAt    DateTime @default(now())
-
-  activity PlannerActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-}
-
-model PlannerEvent {
-  id           String   @id @default(uuid())
-  itemId       String?
-  tripId       String
-  activityId   String?
-  title        String
-  date         String
-  startMinute  Int      @default(0)
-  durationMins Int      @default(60)
-  color        String   @default("blue")
-  notes        String?
-  allDay       Boolean  @default(false)
-  url          String?
-  mapsUrl      String?
-  cost         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  trip     Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  item     TripItem?          @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  activity PlannerActivity?   @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  files    PlannerEventFile[]
-
-  @@index([itemId])
-}
-
-model PlannerEventFile {
-  id           String   @id @default(uuid())
-  eventId      String
-  filename     String
-  originalName String
-  mimeType     String   @default("application/octet-stream")
-  size         Int      @default(0)
-  createdAt    DateTime @default(now())
-
-  event PlannerEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-}
-
 // ===== טיסות =====
 
 model TripFlight {
@@ -542,4 +386,171 @@ model Notification {
   @@index([userId, isRead, createdAt])
   @@index([userId, createdAt])
   @@index([tripId])
+}
+
+// ===== NEW UNIFIED SCHEMA =====
+
+// 1. UNIFIED PLACE/ACTIVITY TABLE
+model Place {
+  id           String   @id @default(uuid())
+  tripId       String
+
+  // Basic info
+  name         String
+  nameOriginal String?  // Original name if different (e.g., local language)
+  description  String?  // description_he from CSV
+  category     String   @default("other")
+  emoji        String   @default("📌")
+  color        String   @default("blue")
+
+  // Location
+  location     String?  // address from CSV
+  lat          Float?
+  lng          Float?
+
+  // Google Places integration
+  placeId      String?  // Google Place ID
+  openingHours Json?    // Opening hours from Google Places API (JSON or simple text)
+  rating       Float?   // Google rating
+  ratingCount  Int?     // Number of ratings (rating_count)
+
+  // URLs
+  mapsUrl      String?  // google_maps_link
+  url          String?  // website
+
+  // Activity details
+  cost         String?  // cost from CSV
+  durationMins Int?     // Estimated duration (not in CSV, keep for compatibility)
+  estimatedDuration String? // estimated_duration from CSV (text format)
+
+  // Notes
+  notes        String?  // notes from CSV
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  trip              Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  scheduledEvents   ScheduledEvent[]
+  mapPoints         MapPoint[]
+  photos            PlacePhoto[]
+  files             PlaceFile[]
+  votes             PlaceVote[]
+
+  @@index([tripId])
+  @@index([tripId, name])
+  @@index([tripId, category])
+  @@index([placeId])
+}
+
+model PlacePhoto {
+  id        String   @id @default(uuid())
+  placeId   String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@index([placeId])
+}
+
+model PlaceFile {
+  id           String   @id @default(uuid())
+  placeId      String
+  filename     String
+  originalName String
+  mimeType     String   @default("application/octet-stream")
+  size         Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  place        Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@index([placeId])
+}
+
+model PlaceVote {
+  id        String   @id @default(uuid())
+  placeId   String
+  userId    String
+  tripId    String
+  vote      String   // "👍", "👎", "❤️", etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([placeId, userId])
+  @@index([tripId])
+}
+
+// 2. SCHEDULED EVENTS (Calendar/Planner)
+model ScheduledEvent {
+  id           String   @id @default(uuid())
+  tripId       String
+  placeId      String?  // FK to Place (null for generic events)
+
+  // Schedule
+  date         String   // YYYY-MM-DD
+  startMinute  Int      @default(0)
+  durationMins Int      @default(60)
+  allDay       Boolean  @default(false)
+
+  // Override place details if needed
+  title        String?
+  notes        String?
+  color        String?
+
+  // Opening hours validation
+  openingHoursWarning Json?
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place        Place?   @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  files        ScheduledEventFile[]
+
+  @@index([tripId, date])
+  @@index([placeId])
+}
+
+model ScheduledEventFile {
+  id           String         @id @default(uuid())
+  eventId      String
+  filename     String
+  originalName String
+  mimeType     String         @default("application/octet-stream")
+  size         Int            @default(0)
+  createdAt    DateTime       @default(now())
+
+  event        ScheduledEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+// 3. MAP POINTS (Map order/route)
+model MapPoint {
+  id        String   @id @default(uuid())
+  tripId    String
+  placeId   String
+
+  // Map display
+  date      String?  // YYYY-MM-DD (optional)
+  order     Int      @default(0)
+  notes     String?
+
+  // Metadata
+  createdAt DateTime @default(now())
+
+  // Relations
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, placeId, date])
+  @@index([tripId, date, order])
+  @@index([placeId])
 }

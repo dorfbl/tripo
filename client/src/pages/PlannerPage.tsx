@@ -17,6 +17,10 @@ const GRID_H     = (END_HOUR - START_HOUR) * PX_PER_HR; // 1024
 const HOURS      = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 const DAY_HDR_H  = 48; // sticky day header height
 const TIME_COL_W = 52; // time labels column width
+const SIDEBAR_MIN_W = 220;
+const SIDEBAR_MAX_W = 640;
+const SIDEBAR_DEFAULT_W = 288;
+const SIDEBAR_WIDTH_STORAGE_KEY = 'plannerSidebarWidth';
 
 const snap15 = (m: number) => Math.round(m / 15) * 15;
 const minToY  = (m: number) => (m - START_MIN) * PX_PER_MIN;
@@ -38,13 +42,15 @@ const fmtDate = (iso: string) =>
 // ─── Categories & Colors (generic — not trip-specific) ───────────────────────
 
 const CATS = [
-  { id: 'nature',   label: '🌲 טבע',     color: 'green'  },
-  { id: 'culture',  label: '🏛️ תרבות',   color: 'blue'   },
-  { id: 'activity', label: '🎯 פעילות',  color: 'purple' },
-  { id: 'food',     label: '🍽️ אוכל',    color: 'orange' },
-  { id: 'travel',   label: '🚐 נסיעה',   color: 'yellow' },
-  { id: 'special',  label: '⭐ מיוחד',   color: 'red'    },
-  { id: 'other',    label: '📌 כללי',    color: 'gray'   },
+  { id: 'nature',     label: '🌲 טבע',      color: 'green'  },
+  { id: 'culture',    label: '🏛️ תרבות',    color: 'blue'   },
+  { id: 'activity',   label: '🎯 פעילות',   color: 'purple' },
+  { id: 'restaurant', label: '🍽️ מסעדה',    color: 'orange' },
+  { id: 'hotel',      label: '🏨 לינה',     color: 'blue'   },
+  { id: 'shopping',   label: '🛍️ קניות',    color: 'orange' },
+  { id: 'travel',     label: '🚐 נסיעה',    color: 'yellow' },
+  { id: 'special',    label: '⭐ מיוחד',    color: 'red'    },
+  { id: 'other',      label: '📌 כללי',     color: 'gray'   },
 ];
 
 const COLORS: Record<string, { pill: string; event: string; border: string; text: string }> = {
@@ -241,8 +247,23 @@ interface EventFile {
   id: string; eventId: string; filename: string; originalName: string; mimeType: string; size: number;
 }
 interface Activity {
-  id: string; name: string; emoji: string; location?: string; description?: string;
-  durationMins: number; cost?: string; category: string; mapsUrl?: string; url?: string; color: string;
+  id: string;
+  name: string;
+  nameOriginal?: string | null;
+  emoji: string;
+  location?: string;
+  description?: string;
+  durationMins: number;
+  estimatedDuration?: string | null;
+  cost?: string;
+  category: string;
+  mapsUrl?: string;
+  url?: string;
+  color: string;
+  placeId?: string | null;
+  openingHours?: any;
+  rating?: number | null;
+  ratingCount?: number | null;
   files: ActivityFile[];
 }
 
@@ -283,6 +304,14 @@ export const PlannerPage: React.FC = () => {
   const [filter, setFilter]         = useState('all');
   const [search, setSearch]         = useState('');
   const [loading, setLoading]       = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const rawSavedWidth = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
+    const saved = rawSavedWidth == null ? Number.NaN : Number(rawSavedWidth);
+    return Number.isFinite(saved)
+      ? clamp(saved, SIDEBAR_MIN_W, SIDEBAR_MAX_W)
+      : SIDEBAR_DEFAULT_W;
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const [weatherByDate, setWeatherByDate] = useState<Record<string, { emoji: string; tempMax: number; rain: number | null }>>({});
   const [hoursToast, setHoursToast] = useState<{ severity: 'warn' | 'critical'; messages: string[] } | null>(null);
   const [aiDraft, setAiDraft] = useState<{
@@ -310,7 +339,9 @@ export const PlannerPage: React.FC = () => {
   const dragEvtState = useRef<{ eventId: string; type: 'move'|'resize'; startY: number; origMin: number; origDur: number; origDate: string } | null>(null);
   const wasDragging  = useRef(false);
   const dayColRefs   = useRef<Map<string, HTMLDivElement>>(new Map());
+  const sidebarWidthRef = useRef(sidebarWidth);
   eventsRef.current  = events;
+  sidebarWidthRef.current = sidebarWidth;
 
   const calRef = useRef<HTMLDivElement>(null);
 
@@ -664,7 +695,10 @@ export const PlannerPage: React.FC = () => {
     const known = CATS.filter(c => present.has(c.id));
     const extra = [...present]
       .filter(id => !CATS.some(c => c.id === id))
-      .map(id => ({ id, label: id, color: 'gray' as const }));
+      .map(id => {
+        console.warn('Unknown category ID found:', id, '- add it to CATS array');
+        return { id, label: id, color: 'gray' as const };
+      });
     return [...known, ...extra];
   }, [activities]);
   // Reset filter if selected category disappeared (e.g. bank cleared)
@@ -766,7 +800,7 @@ export const PlannerPage: React.FC = () => {
 
 
       {/* Desktop view */}
-      <div className="hidden md:flex flex-col h-screen overflow-hidden bg-neutral-50">
+      <div className={`hidden md:flex flex-col h-screen overflow-hidden bg-neutral-50 ${isResizing ? 'select-none' : ''}`}>
 
         {/* Plan sub-tabs (החלטות / פעילויות / לוח זמנים) */}
         <div className="px-5 pt-3 pb-0 bg-white border-b border-neutral-100 flex-shrink-0">
@@ -884,7 +918,55 @@ export const PlannerPage: React.FC = () => {
         <div className="flex flex-1 min-h-0">
 
           {/* ── Left Panel: Activities ── */}
-          <div className="w-72 flex-shrink-0 flex flex-col border-l border-neutral-200 bg-white relative">
+          <div
+            className="flex-shrink-0 flex flex-col border-l border-neutral-200 bg-white relative"
+            style={{ width: `${sidebarWidth}px`, flexBasis: `${sidebarWidth}px` }}
+          >
+            {/* Resize handle - on LEFT edge (between sidebar and calendar) */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="שינוי רוחב סרגל הפעילויות"
+              title="גררו לשינוי רוחב"
+              className="absolute top-0 left-0 bottom-0 w-4 -translate-x-1/2 cursor-col-resize hover:bg-brand-500/20 active:bg-brand-500/30 transition-colors z-30 flex items-center justify-center group"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsResizing(true);
+                const startX = e.clientX;
+                const startWidth = sidebarWidthRef.current;
+                let nextWidth = startWidth;
+
+                const handleMouseMove = (moveE: MouseEvent) => {
+                  moveE.preventDefault();
+                  const delta = startX - moveE.clientX;
+                  nextWidth = clamp(startWidth + delta, SIDEBAR_MIN_W, SIDEBAR_MAX_W);
+                  sidebarWidthRef.current = nextWidth;
+                  setSidebarWidth(nextWidth);
+                };
+
+                const handleMouseUp = () => {
+                  setIsResizing(false);
+                  localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                  document.body.style.cursor = '';
+                  document.body.style.userSelect = '';
+                };
+
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              }}
+            >
+              {/* Visual grip indicator - three vertical dots */}
+              <div className={`flex flex-col gap-1 rounded-full bg-white/75 px-1 py-1.5 shadow-sm ring-1 ring-neutral-200 transition-opacity ${isResizing ? "opacity-100" : "opacity-45 group-hover:opacity-100"}`}>
+                <div className="w-1 h-1 rounded-full bg-neutral-400" />
+                <div className="w-1 h-1 rounded-full bg-neutral-400" />
+                <div className="w-1 h-1 rounded-full bg-neutral-400" />
+              </div>
+            </div>
 
             {/* Panel header */}
             <div className="px-4 py-3 border-b border-neutral-200">
@@ -1150,8 +1232,14 @@ const ActivityCard: React.FC<{
         {act.cost && <span className="text-xs font-medium text-neutral-600">{act.cost}</span>}
         <span className="inline-flex items-center gap-0.5 text-xs text-neutral-400">
           <Icon name="clock" size={12} className="text-neutral-400" />
-          {fmtDur(act.durationMins)}
+          {act.estimatedDuration || fmtDur(act.durationMins)}
         </span>
+        {act.openingHours === null && (
+          <span className="text-xs font-medium text-green-600" title="פתוח 24/7">24/7</span>
+        )}
+        {act.rating && (
+          <span className="text-xs font-medium text-amber-600">⭐ {act.rating.toFixed(1)}</span>
+        )}
         {act.url && (
           <a
             href={act.url}
@@ -1292,11 +1380,6 @@ function layoutDayEvents(events: CalEvent[]): Map<string, { leftPct: number; wid
   }
   flush();
 
-  // Debug logging
-  if (out.size > 0) {
-    console.log('[overlap-layout]', events.length, 'events →', out.size, 'positioned', Array.from(out.entries()).map(([id, l]) => `${id.slice(0,8)}:${l.leftPct.toFixed(0)}%/${l.widthPct.toFixed(0)}%`));
-  }
-
   return out;
 }
 
@@ -1399,10 +1482,6 @@ const CalendarEvent: React.FC<{
   const height = Math.max(20, Math.min(ev.durationMins * PX_PER_MIN, GRID_H - top));
   const c      = col(ev.color);
 
-  // Debug: log layout for events that should have one
-  if (layout && (layout.leftPct !== 0 || layout.widthPct !== 100)) {
-    console.log('[event-layout]', ev.id.slice(0, 12), ev.title.slice(0, 20), '→', layout);
-  }
   const short  = height < 44;  // title only
   const tall   = height >= 76; // title + icons + time + notes
   const narrow = layout && layout.widthPct < 100; // overlapping with others
@@ -1453,10 +1532,9 @@ const CalendarEvent: React.FC<{
         </span>
       )}
       <div className="px-1.5 pt-0.5 pb-3 leading-tight flex flex-col gap-0.5">
-        {/* Title + cost */}
+        {/* Title only */}
         <div className="flex items-start justify-between gap-1">
-          <p className="text-xs font-semibold truncate flex-1">{ev.title}</p>
-          {ev.cost && !short && !narrow && <span className="text-[10px] font-medium opacity-75 flex-shrink-0">{ev.cost}</span>}
+          <p className="text-xs font-semibold truncate flex-1" title={`ID: ${ev.id}, Title: ${ev.title}, ActivityID: ${ev.activityId}`}>{ev.title}</p>
         </div>
         {/* Time row */}
         {tall && (

@@ -20,12 +20,12 @@ import {
 const checkMember = (tripId: string, userId: string) =>
   prisma.tripMember.findUnique({ where: { userId_tripId: { userId, tripId } } });
 
-/** Load activity only if it belongs to this trip (prevents cross-trip place leakage). */
+/** Load place (activity) only if it belongs to this trip (prevents cross-trip place leakage). */
 async function getTripActivity(tripId: string, activityId: string | null | undefined) {
   if (!activityId) return null;
-  return prisma.plannerActivity.findFirst({
+  // NEW SCHEMA: Query Place instead of PlannerActivity
+  return prisma.place.findFirst({
     where: { id: activityId, tripId },
-    include: { item: true },
   });
 }
 
@@ -33,29 +33,35 @@ async function resolveEventMeta(event: {
   title: string;
   tripId?: string;
   activityId?: string | null;
+  placeId?: string | null;
   mapsUrl?: string | null;
   item?: any;
+  place?: any;
 }) {
-  let category: string | null = event.item?.category ?? null;
-  let location: string | null = event.item?.location ?? null;
-  let mapsUrl: string | null = event.item?.mapsUrl ?? event.mapsUrl ?? null;
-  let name: string | null = event.item?.name ?? event.title;
+  let category: string | null = event.item?.category ?? event.place?.category ?? null;
+  let location: string | null = event.item?.location ?? event.place?.location ?? null;
+  let mapsUrl: string | null = event.item?.mapsUrl ?? event.place?.mapsUrl ?? event.mapsUrl ?? null;
+  let name: string | null = event.item?.name ?? event.place?.name ?? event.title;
+  let openingHours: any = event.item?.openingHours ?? event.place?.openingHours ?? undefined;
 
-  if (event.activityId) {
-    const act = event.tripId
-      ? await getTripActivity(event.tripId, event.activityId)
-      : await prisma.plannerActivity.findUnique({
-          where: { id: event.activityId },
-          include: { item: true },
+  // Try both activityId (frontend) and placeId (database)
+  const placeIdToFetch = event.activityId ?? event.placeId;
+
+  if (placeIdToFetch && !event.place) {
+    const place = event.tripId
+      ? await getTripActivity(event.tripId, placeIdToFetch)
+      : await prisma.place.findUnique({
+          where: { id: placeIdToFetch },
         });
-    if (act) {
-      category = act.item?.category ?? act.category ?? category;
-      location = act.item?.location ?? act.location ?? location;
-      mapsUrl = act.item?.mapsUrl ?? act.mapsUrl ?? mapsUrl;
-      name = act.item?.name ?? act.name ?? name;
+    if (place) {
+      category = place.category ?? category;
+      location = place.location ?? location;
+      mapsUrl = place.mapsUrl ?? mapsUrl;
+      name = place.name ?? name;
+      openingHours = place.openingHours ?? openingHours;
     }
   }
-  return { category, location, mapsUrl, name };
+  return { category, location, mapsUrl, name, openingHours };
 }
 
 async function warningsForEvent(event: {
@@ -83,6 +89,7 @@ async function warningsForEvent(event: {
     mapsUrl: event.mapsUrl || meta.mapsUrl,
     location: event.location || meta.location,
     name: meta.name || event.title,
+    openingHours: meta.openingHours,
   });
 }
 
@@ -159,34 +166,94 @@ export const getPlanner = async (req: AuthRequest, res: Response): Promise<void>
     const { tripId } = req.params as { tripId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
 
-    const [activities, events] = await Promise.all([
-      prisma.plannerActivity.findMany({ where: { tripId }, orderBy: { createdAt: 'asc' }, include: { files: true, item: true } }),
-      prisma.plannerEvent.findMany({ where: { tripId }, orderBy: [{ date: 'asc' }, { startMinute: 'asc' }], include: { files: true, item: true, activity: true } }),
+    // NEW SCHEMA: Query Place and ScheduledEvent
+    const [places, events] = await Promise.all([
+      prisma.place.findMany({
+        where: { tripId },
+        orderBy: { createdAt: 'asc' },
+        include: { files: true, votes: true }
+      }),
+      prisma.scheduledEvent.findMany({
+        where: { tripId },
+        orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
+        include: { files: true, place: true }
+      }),
     ]);
 
-    const serialized = events.map(serializeEvent);
+    // Convert to old format with ALL Place fields from CSV
+    const activities = places.map((p) => ({
+      id: p.id,
+      tripId: p.tripId,
+      name: p.name,
+      nameOriginal: p.nameOriginal,
+      emoji: p.emoji,
+      location: p.location,
+      description: p.description,
+      durationMins: p.durationMins || 60,
+      estimatedDuration: p.estimatedDuration,
+      cost: p.cost,
+      category: p.category,
+      mapsUrl: p.mapsUrl,
+      url: p.url,
+      color: p.color,
+      placeId: p.placeId,
+      openingHours: p.openingHours,
+      rating: p.rating,
+      ratingCount: p.ratingCount,
+      createdAt: p.createdAt,
+      files: p.files,
+      votes: p.votes,
+      item: null, // No longer using TripItem
+    }));
+
+    const serializedEvents = events.map((ev) => ({
+      id: ev.id,
+      tripId: ev.tripId,
+      activityId: ev.placeId, // Map placeId to activityId for compatibility
+      title: ev.title || ev.place?.name || '',
+      date: ev.date,
+      startMinute: ev.startMinute,
+      durationMins: ev.durationMins,
+      color: ev.color || ev.place?.color || 'blue',
+      notes: ev.notes,
+      allDay: ev.allDay,
+      url: ev.place?.url || null,
+      mapsUrl: ev.place?.mapsUrl || null,
+      cost: ev.place?.cost || null,
+      createdAt: ev.createdAt,
+      updatedAt: ev.updatedAt,
+      files: ev.files,
+      activity: ev.place ? {
+        id: ev.place.id,
+        name: ev.place.name,
+        category: ev.place.category,
+        location: ev.place.location,
+        mapsUrl: ev.place.mapsUrl,
+      } : null,
+    }));
+
     // Fast path only — Google is used on create/update/check-hours (not on every load)
     const checkInputs = events.map((ev) => ({
       id: ev.id,
-      title: ev.title,
+      title: ev.title || ev.place?.name || '',
       date: ev.date,
       startMinute: ev.startMinute,
       durationMins: ev.durationMins,
       allDay: Boolean(ev.allDay),
-      category: (ev as any).activity?.category ?? ev.item?.category ?? null,
-      mapsUrl: ev.item?.mapsUrl ?? ev.mapsUrl ?? (ev as any).activity?.mapsUrl ?? null,
-      location: (ev as any).activity?.location ?? ev.item?.location ?? null,
-      name: (ev as any).activity?.name ?? ev.item?.name ?? ev.title,
+      category: ev.place?.category ?? null,
+      mapsUrl: ev.place?.mapsUrl ?? null,
+      location: ev.place?.location ?? null,
+      name: ev.place?.name ?? ev.title ?? '',
     }));
     const warningsById = checkEventsOpeningHoursFast(checkInputs);
-    const eventsWithWarnings = serialized.map((ev: any) => ({
+    const eventsWithWarnings = serializedEvents.map((ev: any) => ({
       ...ev,
       scheduleWarnings: warningsById[ev.id] || [],
       scheduleSeverity: worstSeverity(warningsById[ev.id] || []),
     }));
 
     res.json({
-      activities: activities.map(serializeActivity),
+      activities,
       events: eventsWithWarnings,
       scheduleWarningCount: Object.keys(warningsById).length,
     });
@@ -265,12 +332,43 @@ export const createActivity = async (req: AuthRequest, res: Response): Promise<v
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
     const { name, emoji, location, description, durationMins, cost, category, mapsUrl, url, color } = req.body;
     if (!name?.trim()) { res.status(400).json({ error: 'שם שדה חובה' }); return; }
-    const item = await findOrCreateTripItem(tripId, { name, emoji, location, description, durationMins, cost, category, mapsUrl, url, color }, 'activity');
-    const activity = await prisma.plannerActivity.create({
-      data: { tripId, itemId: item.id, name: item.name, emoji: item.emoji || '📌', location: item.location || null, description: item.description || null, durationMins: item.durationMins ?? 60, cost: item.cost || null, category: item.category || 'other', mapsUrl: item.mapsUrl || null, url: item.url || null, color: item.color || 'blue' },
-      include: { files: true, item: true },
+
+    // NEW SCHEMA: Create Place directly
+    const place = await prisma.place.create({
+      data: {
+        tripId,
+        name: name.trim(),
+        emoji: emoji || '📌',
+        location: location || null,
+        description: description || null,
+        durationMins: durationMins ?? 60,
+        cost: cost || null,
+        category: category || 'other',
+        mapsUrl: mapsUrl || null,
+        url: url || null,
+        color: color || 'blue',
+      },
+      include: { files: true, votes: true },
     });
-    res.status(201).json({ activity: serializeActivity(activity) });
+
+    res.status(201).json({ activity: {
+      id: place.id,
+      tripId: place.tripId,
+      name: place.name,
+      emoji: place.emoji,
+      location: place.location,
+      description: place.description,
+      durationMins: place.durationMins,
+      cost: place.cost,
+      category: place.category,
+      mapsUrl: place.mapsUrl,
+      url: place.url,
+      color: place.color,
+      createdAt: place.createdAt,
+      files: place.files,
+      votes: place.votes,
+      item: null,
+    }});
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
 
@@ -379,67 +477,43 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
     const { activityId, title, date, startMinute, durationMins, color, notes, allDay, url, mapsUrl, cost, category, location } = req.body;
     if (!title?.trim() || !date) { res.status(400).json({ error: 'שדות חסרים' }); return; }
-    // Only link activities that belong to this trip
-    const activity = await getTripActivity(tripId, activityId || null);
-    const item =
-      activity?.item && activity.item.tripId === tripId
-        ? activity.item
-        : await findOrCreateTripItem(tripId, {
-            name: title,
-            description: notes,
-            durationMins,
-            color,
-            url,
-            mapsUrl,
-            cost,
-            category: category || activity?.category,
-            location: location || activity?.location,
-          }, 'event');
+
+    // NEW SCHEMA: Get linked place (activity) if provided
+    const place = await getTripActivity(tripId, activityId || null);
+
     const startMinNum = allDay ? 0 : Math.max(0, Math.min(1439, Number(startMinute) || 0));
-    const durNum = Math.max(15, Number(durationMins) || item.durationMins || 60);
-    const linkedActivityId = activity?.id ?? null;
-    const event = await prisma.plannerEvent.create({
+    const durNum = Math.max(15, Number(durationMins) || place?.durationMins || 60);
+
+    // NEW SCHEMA: Create ScheduledEvent
+    const event = await prisma.scheduledEvent.create({
       data: {
         tripId,
-        itemId: item.id,
-        activityId: linkedActivityId,
-        title: item.name,
+        placeId: place?.id ?? null,
+        title: title.trim(),
         date: String(date).slice(0, 10),
         startMinute: startMinNum,
         durationMins: durNum,
-        color: item.color || color || 'blue',
+        color: color || place?.color || 'blue',
         notes: notes || null,
         allDay: Boolean(allDay),
-        url: item.url || activity?.url || url || null,
-        mapsUrl: item.mapsUrl || activity?.mapsUrl || mapsUrl || null,
-        cost: item.cost || cost || null,
       },
-      include: { files: true, item: true },
+      include: { files: true, place: true },
     });
 
     let scheduleWarnings: ScheduleWarning[] = [];
     try {
       scheduleWarnings = await warningsForEvent({
         tripId,
-        title: event.title,
+        title: event.title || '',
         date: event.date,
         startMinute: event.startMinute,
         durationMins: event.durationMins,
         allDay: event.allDay,
-        activityId: linkedActivityId,
-        mapsUrl: event.mapsUrl || activity?.mapsUrl || activity?.item?.mapsUrl || mapsUrl || null,
-        category: category || activity?.category || activity?.item?.category || null,
-        location: location || activity?.location || activity?.item?.location || null,
-        item: event.item || activity?.item,
+        activityId: place?.id ?? null,
+        mapsUrl: place?.mapsUrl ?? null,
+        category: place?.category ?? null,
+        location: place?.location ?? null,
       });
-      console.log(
-        '[planner] hours check create',
-        event.title,
-        event.date,
-        event.startMinute,
-        '→',
-        scheduleWarnings.map((w) => w.code).join(',') || 'ok',
-      );
     } catch (err) {
       console.error('[planner] hours check failed on create:', err);
     }
@@ -451,7 +525,7 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
           req.userId!,
           {
             id: event.id,
-            title: event.title,
+            title: event.title || '',
             date: event.date,
             startMinute: event.startMinute,
             allDay: event.allDay,
@@ -474,12 +548,37 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       }
     })();
 
+    // Return in frontend-compatible format
+    const serializedEvent = {
+      id: event.id,
+      tripId: event.tripId,
+      activityId: event.placeId,
+      title: event.title || place?.name || '',
+      date: event.date,
+      startMinute: event.startMinute,
+      durationMins: event.durationMins,
+      color: event.color || place?.color || 'blue',
+      notes: event.notes,
+      allDay: event.allDay,
+      url: place?.url || null,
+      mapsUrl: place?.mapsUrl || null,
+      cost: place?.cost || null,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      files: event.files,
+      activity: place ? {
+        id: place.id,
+        name: place.name,
+        category: place.category,
+        location: place.location,
+        mapsUrl: place.mapsUrl,
+      } : null,
+      scheduleWarnings,
+      scheduleSeverity: worstSeverity(scheduleWarnings),
+    };
+
     res.status(201).json({
-      event: {
-        ...serializeEvent(event),
-        scheduleWarnings,
-        scheduleSeverity: worstSeverity(scheduleWarnings),
-      },
+      event: serializedEvent,
       scheduleWarnings,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
@@ -489,28 +588,25 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { tripId, eventId } = req.params as { tripId: string; eventId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const { title, date, startMinute, durationMins, color, notes, allDay, url, mapsUrl, cost } = req.body;
-    const existing = await prisma.plannerEvent.findFirst({ where: { id: eventId, tripId } });
+    const { title, date, startMinute, durationMins, color, notes, allDay } = req.body;
+
+    // NEW SCHEMA: Query ScheduledEvent
+    const existing = await prisma.scheduledEvent.findFirst({ where: { id: eventId, tripId } });
     if (!existing) { res.status(404).json({ error: 'אירוע לא נמצא' }); return; }
-    const item = (title !== undefined || url !== undefined || mapsUrl !== undefined || cost !== undefined || color !== undefined)
-      ? await updateTripItem(existing.itemId, tripId, { name: title, durationMins, color, notes, url, mapsUrl, cost }, 'event')
-      : existing.itemId ? await prisma.tripItem.findUnique({ where: { id: existing.itemId } }) : null;
-    const event = await prisma.plannerEvent.update({
+
+    // NEW SCHEMA: Update ScheduledEvent
+    const event = await prisma.scheduledEvent.update({
       where: { id: eventId },
       data: {
-        ...(item && { itemId: item.id }),
-        ...(title && { title: item?.name ?? title.trim() }),
-        ...(date && { date }),
-        ...(startMinute !== undefined && { startMinute }),
-        ...(durationMins && { durationMins }),
-        ...(color && { color: item?.color ?? color }),
+        ...(title !== undefined && { title: title.trim() }),
+        ...(date && { date: String(date).slice(0, 10) }),
+        ...(startMinute !== undefined && { startMinute: Number(startMinute) }),
+        ...(durationMins !== undefined && { durationMins: Number(durationMins) }),
+        ...(color && { color }),
         ...(notes !== undefined && { notes: notes || null }),
         ...(allDay !== undefined && { allDay: Boolean(allDay) }),
-        ...(url !== undefined && { url: item?.url ?? null }),
-        ...(mapsUrl !== undefined && { mapsUrl: item?.mapsUrl ?? null }),
-        ...(cost !== undefined && { cost: item?.cost ?? null }),
       },
-      include: { files: true, item: true },
+      include: { files: true, place: true },
     });
 
     let scheduleWarnings: ScheduleWarning[] = [];
@@ -552,14 +648,39 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       }
     })();
 
-    res.json({
-      event: {
-        ...serializeEvent(event),
-        scheduleWarnings,
-        scheduleSeverity: worstSeverity(scheduleWarnings),
-      },
+    // Convert to old format for frontend compatibility
+    const serialized = {
+      id: event.id,
+      tripId: event.tripId,
+      activityId: event.placeId,
+      title: event.title || event.place?.name || '',
+      date: event.date,
+      startMinute: event.startMinute,
+      durationMins: event.durationMins,
+      color: event.color,
+      notes: event.notes,
+      allDay: event.allDay,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      files: event.files,
+      item: event.place ? {
+        id: event.place.id,
+        name: event.place.name,
+        emoji: event.place.emoji,
+        location: event.place.location,
+        description: event.place.description,
+        durationMins: event.place.durationMins || 60,
+        cost: event.place.cost,
+        category: event.place.category,
+        mapsUrl: event.place.mapsUrl,
+        url: event.place.url,
+        color: event.place.color,
+      } : null,
       scheduleWarnings,
-    });
+      scheduleSeverity: worstSeverity(scheduleWarnings),
+    };
+
+    res.json({ event: serialized, scheduleWarnings });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
 
@@ -567,7 +688,9 @@ export const deleteEvent = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { tripId, eventId } = req.params as { tripId: string; eventId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    await prisma.plannerEvent.delete({ where: { id: eventId } });
+
+    // NEW SCHEMA: Delete ScheduledEvent
+    await prisma.scheduledEvent.delete({ where: { id: eventId } });
     await clearHoursNotificationsForEvent(tripId, eventId);
 
     // Auto-refresh smart notifications (dismiss resolved issues) in background
@@ -633,9 +756,15 @@ export const getMyVotes = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const { tripId } = req.params as { tripId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const rows = await prisma.plannerActivityVote.findMany({ where: { tripId, userId: req.userId! } });
+
+    // NEW SCHEMA: Use PlaceVote
+    const rows = await prisma.placeVote.findMany({
+      where: { tripId, userId: req.userId! }
+    });
+
     const votes: Record<string, string> = {};
-    for (const r of rows) votes[r.activityId] = r.vote;
+    for (const r of rows) votes[r.placeId] = r.vote; // Use placeId instead of activityId
+
     res.json({ votes });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -644,34 +773,40 @@ export const getVotes = async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const { tripId } = req.params as { tripId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const rows = await prisma.plannerActivityVote.findMany({ where: { tripId } });
+
+    // NEW SCHEMA: Use PlaceVote
+    const rows = await prisma.placeVote.findMany({ where: { tripId } });
     const users = await prisma.user.findMany({
       where: { id: { in: [...new Set(rows.map(r => r.userId))] } },
       select: { id: true, name: true, avatarUrl: true },
     });
     const userMap = new Map(users.map(u => [u.id, u]));
+
     const map: Record<string, {
-      activityId: string;
+      activityId: string; // Keep as activityId for frontend compatibility
       MUST: number; OK: number; IF_OTHERS: number; NOT_REALLY: number; AGAINST: number;
       voters: Record<string, Array<{ id: string; name: string; avatarUrl: string | null }>>;
     }> = {};
+
     for (const r of rows) {
-      if (!map[r.activityId]) {
-        map[r.activityId] = {
-          activityId: r.activityId, MUST: 0, OK: 0, IF_OTHERS: 0, NOT_REALLY: 0, AGAINST: 0,
+      if (!map[r.placeId]) {
+        map[r.placeId] = {
+          activityId: r.placeId, // Use placeId but call it activityId for frontend
+          MUST: 0, OK: 0, IF_OTHERS: 0, NOT_REALLY: 0, AGAINST: 0,
           voters: { MUST: [], OK: [], IF_OTHERS: [], NOT_REALLY: [], AGAINST: [] },
         };
       }
       if (VALID_VOTES.has(r.vote)) {
-        (map[r.activityId] as any)[r.vote]++;
+        (map[r.placeId] as any)[r.vote]++;
         const user = userMap.get(r.userId);
-        map[r.activityId].voters[r.vote]?.push({
+        map[r.placeId].voters[r.vote]?.push({
           id: r.userId,
           name: user?.name ?? 'משתמש לא ידוע',
           avatarUrl: user?.avatarUrl ?? null,
         });
       }
     }
+
     res.json({ votes: Object.values(map) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -682,15 +817,18 @@ export const submitVotes = async (req: AuthRequest, res: Response): Promise<void
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
     const { votes } = req.body as { votes: Array<{ activityId: string; vote: string }> };
     if (!Array.isArray(votes) || votes.length === 0) { res.status(400).json({ error: 'invalid' }); return; }
+
+    // NEW SCHEMA: Use PlaceVote
     await Promise.all(
       votes.filter(v => VALID_VOTES.has(v.vote)).map(({ activityId, vote }) =>
-        prisma.plannerActivityVote.upsert({
-          where: { activityId_userId: { activityId, userId: req.userId! } },
+        prisma.placeVote.upsert({
+          where: { placeId_userId: { placeId: activityId, userId: req.userId! } }, // activityId is actually placeId
           update: { vote },
-          create: { activityId, tripId, userId: req.userId!, vote },
+          create: { placeId: activityId, tripId, userId: req.userId!, vote },
         })
       )
     );
+
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -745,10 +883,11 @@ export const generateAiScheduleDraft = async (req: AuthRequest, res: Response): 
     const startDate = trip.startDate.toISOString().slice(0, 10);
     const endDate = trip.endDate.toISOString().slice(0, 10);
 
+    // NEW SCHEMA: Use Place and PlaceVote
     const [activities, voteRows, existingEvents, flightRows] = await Promise.all([
-      prisma.plannerActivity.findMany({ where: { tripId }, orderBy: { createdAt: 'asc' } }),
-      prisma.plannerActivityVote.findMany({ where: { tripId } }),
-      prisma.plannerEvent.findMany({
+      prisma.place.findMany({ where: { tripId }, orderBy: { createdAt: 'asc' } }),
+      prisma.placeVote.findMany({ where: { tripId } }),
+      prisma.scheduledEvent.findMany({
         where: { tripId },
         select: { date: true, startMinute: true, durationMins: true, title: true, allDay: true },
       }),
@@ -796,10 +935,10 @@ export const generateAiScheduleDraft = async (req: AuthRequest, res: Response): 
       { must: number; ok: number; against: number; score: number; total: number }
     >();
     for (const v of voteRows) {
-      if (!voteAgg.has(v.activityId)) {
-        voteAgg.set(v.activityId, { must: 0, ok: 0, against: 0, score: 0, total: 0 });
+      if (!voteAgg.has(v.placeId)) { // Use placeId instead of activityId
+        voteAgg.set(v.placeId, { must: 0, ok: 0, against: 0, score: 0, total: 0 });
       }
-      const a = voteAgg.get(v.activityId)!;
+      const a = voteAgg.get(v.placeId)!;
       a.total += 1;
       a.score += VOTE_WEIGHT[v.vote] ?? 0;
       if (v.vote === 'MUST') a.must += 1;

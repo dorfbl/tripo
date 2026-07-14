@@ -30,6 +30,7 @@ export interface ScheduleCheckInput {
   mapsUrl?: string | null;
   location?: string | null;
   name?: string | null;
+  openingHours?: any; // From Place.openingHours (database)
 }
 
 interface DayPeriod {
@@ -172,6 +173,136 @@ function dayCoverageMinutes(periodsD: DayPeriod[]): number {
     cur = Math.max(cur, p.closeMin);
   }
   return cover;
+}
+
+/**
+ * Parse database weekday_text array into ResolvedHours format.
+ * Handles both standard and condensed Hebrew formats:
+ * - Standard: ["Monday: 15:00–2:00", "Tuesday: 10:00–18:00", ...]
+ * - Condensed: ["א'-ה': 15:00–2:00 | ו'-שבת: 15:00–3:00"]
+ */
+function parseWeekdayTextToHours(weekdayText: string[], placeName: string): ResolvedHours {
+  const byDay: Record<number, DayPeriod[]> = {};
+  for (let d = 0; d < 7; d++) byDay[d] = [];
+
+  // Check if always open
+  if (weekdayTextAlwaysOpen(weekdayText)) {
+    for (let d = 0; d < 7; d++) {
+      byDay[d].push({ openMin: 0, closeMin: 1440 });
+    }
+    return { source: 'google', byDay, alwaysOpen: true, weekdayText, placeName };
+  }
+
+  // Helper to parse Hebrew day abbreviations
+  const parseHebrewDayRange = (dayPart: string): number[] => {
+    // א'=Sunday(0), ב'=Monday(1), ג'=Tuesday(2), ד'=Wednesday(3), ה'=Thursday(4), ו'=Friday(5), שבת=Saturday(6)
+    const dayMap: Record<string, number> = {
+      "א'": 0, "ב'": 1, "ג'": 2, "ד'": 3, "ה'": 4, "ו'": 5, "שבת": 6
+    };
+
+    // Handle ranges like "א'-ה'" or single days like "שבת"
+    if (dayPart.includes('-')) {
+      const [start, end] = dayPart.split('-');
+      const startDay = dayMap[start.trim()];
+      const endDay = dayMap[end.trim()];
+      if (startDay !== undefined && endDay !== undefined) {
+        const days = [];
+        for (let d = startDay; d <= endDay; d++) {
+          days.push(d);
+        }
+        return days;
+      }
+    } else {
+      const day = dayMap[dayPart.trim()];
+      if (day !== undefined) return [day];
+    }
+    return [];
+  };
+
+  // Process each line
+  for (const line of weekdayText) {
+    if (!line) continue;
+
+    // Check for 24h
+    if (is24hTextLine(line)) {
+      for (let d = 0; d < 7; d++) {
+        byDay[d].push({ openMin: 0, closeMin: 1440 });
+      }
+      continue;
+    }
+
+    // Check for condensed Hebrew format: "א'-ה': 15:00–2:00 | ו'-שבת: 15:00–3:00"
+    if (line.includes('|')) {
+      const segments = line.split('|');
+      for (const segment of segments) {
+        const match = segment.match(/([א-ת'-]+)\s*:\s*(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/);
+        if (match) {
+          const dayPart = match[1];
+          const openH = parseInt(match[2], 10);
+          const openM = parseInt(match[3], 10);
+          const closeH = parseInt(match[4], 10);
+          const closeM = parseInt(match[5], 10);
+
+          const days = parseHebrewDayRange(dayPart);
+          const openMin = openH * 60 + openM;
+          let closeMin = closeH * 60 + closeM;
+
+          // Handle next-day closing (e.g., 15:00–2:00)
+          const isNextDay = closeMin < openMin;
+          for (let i = 0; i < days.length; i++) {
+            const jsDow = days[i];
+            byDay[jsDow].push({ openMin, closeMin: isNextDay ? 1440 : closeMin });
+
+            // Add next-day period only if this is the last day in the range or if single day
+            if (isNextDay && (i === days.length - 1 || days.length === 1)) {
+              const nextDay = (jsDow + 1) % 7;
+              byDay[nextDay].push({ openMin: 0, closeMin });
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // Standard format: try to get day from weekday_text position
+    for (let jsDow = 0; jsDow < 7; jsDow++) {
+      const dayLine = weekdayTextForJsDow(weekdayText, jsDow);
+      if (dayLine !== line) continue;
+
+      // Check if closed
+      if (/closed|סגור/i.test(line)) {
+        continue; // leave empty array
+      }
+
+      // Parse time ranges: "15:00–2:00" or "10:00–18:00"
+      const timeRanges = line.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/g);
+      if (!timeRanges) continue;
+
+      for (const range of timeRanges) {
+        const match = range.match(/(\d{1,2}):(\d{2})\s*[–—-]\s*(\d{1,2}):(\d{2})/);
+        if (!match) continue;
+
+        const openH = parseInt(match[1], 10);
+        const openM = parseInt(match[2], 10);
+        const closeH = parseInt(match[3], 10);
+        const closeM = parseInt(match[4], 10);
+
+        const openMin = openH * 60 + openM;
+        let closeMin = closeH * 60 + closeM;
+
+        // Handle next-day closing
+        if (closeMin < openMin) {
+          byDay[jsDow].push({ openMin, closeMin: 1440 });
+          const nextDay = (jsDow + 1) % 7;
+          byDay[nextDay].push({ openMin: 0, closeMin });
+        } else {
+          byDay[jsDow].push({ openMin, closeMin });
+        }
+      }
+    }
+  }
+
+  return { source: 'google', byDay, weekdayText, placeName };
 }
 
 /** Convert Google periods into per-weekday open intervals */
@@ -695,7 +826,25 @@ export async function checkEventOpeningHours(
     return [];
   }
 
-  // 1) Google first when possible — if place is 24/7 or open at that time, trust it
+  // 0) Check database openingHours first (highest priority)
+  if (input.openingHours !== undefined) {
+    // null means 24/7
+    if (input.openingHours === null) return [];
+
+    // If has weekday_text, parse and check
+    if (input.openingHours && typeof input.openingHours === 'object' && input.openingHours.weekday_text) {
+      try {
+        const hours = parseWeekdayTextToHours(input.openingHours.weekday_text, input.title || input.name || 'Place');
+        if (hours.alwaysOpen) return [];
+        const warnings = checkAgainstGoogle(input, hours);
+        return mergeWarnings(warnings);
+      } catch (err) {
+        console.warn('[openingHours] failed to parse DB weekday_text:', err);
+      }
+    }
+  }
+
+  // 1) Google API when possible — if place is 24/7 or open at that time, trust it
   //    (do NOT overlay heuristics that claim "closed" for a 24h venue)
   const query = buildQuery(input);
   const titleLen = (input.title || input.name || '').trim().length;
@@ -718,7 +867,7 @@ export async function checkEventOpeningHours(
     }
   }
 
-  // 2) No Google data → heuristics only
+  // 2) No data → heuristics only
   return mergeWarnings(heuristicWarnings(input));
 }
 

@@ -1,0 +1,174 @@
+// ===== NEW ORGANIZED SCHEMA =====
+
+// 1. UNIFIED PLACE/ACTIVITY TABLE
+// Single source of truth for all places and activities
+model Place {
+  id           String   @id @default(uuid())
+  tripId       String
+
+  // Basic info
+  name         String
+  description  String?
+  category     String   @default("other")
+  emoji        String   @default("📌")
+  color        String   @default("blue")
+
+  // Location
+  location     String?  // Text address/area
+  lat          Float?
+  lng          Float?
+
+  // Google Places integration
+  placeId      String?  // Google Place ID
+  openingHours Json?    // Opening hours from Google Places API
+
+  // URLs
+  mapsUrl      String?
+  url          String?  // Activity booking URL, website, etc.
+
+  // Activity details
+  cost         String?  // "€20-30", "Free", etc.
+  durationMins Int?     // Estimated duration
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  trip              Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  scheduledEvents   ScheduledEvent[]  // When it's scheduled in calendar
+  mapPoints         MapPoint[]        // When it's pinned on map
+  photos            PlacePhoto[]
+  files             PlaceFile[]
+  votes             PlaceVote[]       // For group voting on activities
+
+  @@index([tripId])
+  @@index([tripId, name])
+  @@index([tripId, category])
+  @@index([placeId])
+}
+
+// Photos attached to places
+model PlacePhoto {
+  id        String   @id @default(uuid())
+  placeId   String
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@index([placeId])
+}
+
+// Files attached to places (PDFs, tickets, etc.)
+model PlaceFile {
+  id           String   @id @default(uuid())
+  placeId      String
+  filename     String
+  originalName String
+  mimeType     String   @default("application/octet-stream")
+  size         Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  place        Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@index([placeId])
+}
+
+// Group voting on places/activities
+model PlaceVote {
+  id        String   @id @default(uuid())
+  placeId   String
+  userId    String
+  tripId    String
+  vote      String   // "👍", "👎", "❤️", etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([placeId, userId])
+  @@index([tripId])
+}
+
+
+// 2. SCHEDULED EVENTS (Calendar/Planner)
+// When a place/activity is scheduled at a specific day/time
+model ScheduledEvent {
+  id           String   @id @default(uuid())
+  tripId       String
+  placeId      String?  // FK to Place (null for generic events like "טיסה")
+
+  // Schedule
+  date         String   // YYYY-MM-DD
+  startMinute  Int      @default(0)    // Minutes from midnight (0-1439)
+  durationMins Int      @default(60)
+  allDay       Boolean  @default(false)
+
+  // Override place details if needed
+  title        String?  // Override place name (e.g., "ארוחת בוקר ב-Hofbräuhaus")
+  notes        String?
+  color        String?  // Override place color
+
+  // Opening hours validation
+  openingHoursWarning Json?  // Store warnings from openingHours.service.ts
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place        Place?   @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  files        ScheduledEventFile[]
+
+  @@index([tripId, date])
+  @@index([placeId])
+}
+
+model ScheduledEventFile {
+  id           String         @id @default(uuid())
+  eventId      String
+  filename     String
+  originalName String
+  mimeType     String         @default("application/octet-stream")
+  size         Int            @default(0)
+  createdAt    DateTime       @default(now())
+
+  event        ScheduledEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+
+// 3. MAP POINTS (Map order/route)
+// Places pinned on map with specific day/order
+model MapPoint {
+  id        String   @id @default(uuid())
+  tripId    String
+  placeId   String   // FK to Place (required - map always shows actual places)
+
+  // Map display
+  date      String?  // YYYY-MM-DD (optional - can pin without scheduling)
+  order     Int      @default(0)  // Display order on map for that day
+  notes     String?  // Map-specific notes
+
+  // Metadata
+  createdAt DateTime @default(now())
+
+  // Relations
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, placeId, date])  // One place per day max
+  @@index([tripId, date, order])
+  @@index([placeId])
+}
+
+
+// Updated Trip model (add new relations)
+// Add to existing Trip model:
+//   places           Place[]
+//   scheduledEvents  ScheduledEvent[]
+//   mapPoints        MapPoint[]

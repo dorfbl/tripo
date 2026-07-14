@@ -17,10 +17,11 @@ const PLACE_CATEGORIES = [
   { id: 'restaurant', label: 'מסעדה' },
   { id: 'activity',   label: 'פעילות' },
   { id: 'nature',     label: 'טבע' },
-  { id: 'hotel',      label: 'מלון' },
-  { id: 'transport',  label: 'נסיעה' },
+  { id: 'hotel',      label: 'לינה' },
+  { id: 'travel',     label: 'נסיעה' },
   { id: 'shopping',   label: 'קניות' },
   { id: 'culture',    label: 'תרבות' },
+  { id: 'special',    label: 'מיוחד' },
   { id: 'other',      label: 'כללי' },
 ];
 
@@ -37,12 +38,14 @@ const getPlaceCategoryMarkerPath = (category?: string | null) => {
       return '<path d="M5 19c7-1 12-6 14-14"/><path d="M19 5c-8 0-14 4-14 11 0 2 1 3 3 3 7 0 11-6 11-14z"/>';
     case 'hotel':
       return '<path d="M4 11V5"/><path d="M4 14h16"/><path d="M20 19v-8a3 3 0 0 0-3-3H9v11"/><path d="M4 19v-8"/><path d="M8 8h1"/>';
-    case 'transport':
+    case 'travel':
       return '<path d="M5 16h14"/><path d="M7 16l1.2-5.2A3 3 0 0 1 11.1 8h1.8a3 3 0 0 1 2.9 2.8L17 16"/><path d="M7 16v2"/><path d="M17 16v2"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/>';
     case 'shopping':
       return '<path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>';
     case 'culture':
       return '<path d="M4 9h16"/><path d="M6 9v9"/><path d="M10 9v9"/><path d="M14 9v9"/><path d="M18 9v9"/><path d="M3 21h18"/><path d="M12 3l8 4H4l8-4z"/>';
+    case 'special':
+      return '<path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3z"/><circle cx="12" cy="12" r="2"/>';
     default:
       return '<circle cx="12" cy="12" r="3"/><path d="M12 3v2"/><path d="M12 19v2"/><path d="M3 12h2"/><path d="M19 12h2"/>';
   }
@@ -79,12 +82,36 @@ function buildTripDays(start?: string | null, end?: string | null): string[] {
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface PlacePhoto { id: string; url: string; caption: string | null }
 interface Place {
-  id: string; name: string; lat: number; lng: number;
-  notes: string | null; order: number; mapsUrl?: string | null; date?: string | null;
+  id: string;
+  name: string;
+  nameOriginal?: string | null;
+  lat: number | null;
+  lng: number | null;
+  notes: string | null;
+  description?: string | null;
+  location?: string | null;
+  order: number;
+  mapsUrl?: string | null;
+  url?: string | null;
+  date?: string | null;
   category?: string | null;
+  placeId?: string | null;
+  openingHours?: any;
+  rating?: number | null;
+  ratingCount?: number | null;
+  cost?: string | null;
+  durationMins?: number | null;
+  estimatedDuration?: string | null;
   photos: PlacePhoto[];
 }
 interface GeoResult { placeId?: string; lat?: number; lng?: number; name: string; subtitle: string }
+
+const placePosition = (place: Place): google.maps.LatLngLiteral | null => {
+  const lat = Number(place.lat);
+  const lng = Number(place.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+};
 
 async function searchPlaces(q: string): Promise<GeoResult[]> {
   try { return (await apiClient.get(`/api/geocode/search?q=${encodeURIComponent(q)}`)).data.results ?? []; }
@@ -408,6 +435,65 @@ const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
             </p>
             <CategoryPicker value={place.category ?? 'other'} onChange={handleCategoryChange} disabled={changingCategory} />
           </div>
+
+          {/* Opening Hours */}
+          {place.openingHours || place.openingHours === null ? (
+            <div className="bg-neutral-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-neutral-700 mb-1.5">🕐 שעות פתיחה</p>
+              {place.openingHours === null ? (
+                <p className="text-sm text-neutral-600">פתוח 24/7</p>
+              ) : typeof place.openingHours === 'object' && place.openingHours.weekday_text ? (
+                <div className="space-y-0.5">
+                  {(place.openingHours.weekday_text as string[]).map((day, i) => (
+                    <p key={i} className="text-xs text-neutral-600">{day}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-600">{JSON.stringify(place.openingHours)}</p>
+              )}
+            </div>
+          ) : null}
+
+          {/* Rating, Cost, Duration */}
+          <div className="flex flex-wrap gap-2">
+            {place.rating && (
+              <div className="bg-neutral-50 rounded-lg px-3 py-2 flex-shrink-0">
+                <p className="text-xs font-semibold text-neutral-700">⭐ דירוג</p>
+                <p className="text-sm text-neutral-900 font-medium">
+                  {place.rating.toFixed(1)}
+                  {place.ratingCount ? ` (${place.ratingCount.toLocaleString()})` : ''}
+                </p>
+              </div>
+            )}
+            {place.cost && (
+              <div className="bg-neutral-50 rounded-lg px-3 py-2 flex-shrink-0">
+                <p className="text-xs font-semibold text-neutral-700">💰 מחיר</p>
+                <p className="text-sm text-neutral-900">{place.cost}</p>
+              </div>
+            )}
+            {place.estimatedDuration && (
+              <div className="bg-neutral-50 rounded-lg px-3 py-2 flex-shrink-0">
+                <p className="text-xs font-semibold text-neutral-700">⏱️ משך</p>
+                <p className="text-sm text-neutral-900">{place.estimatedDuration}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          {place.description && (
+            <div className="bg-neutral-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-neutral-700 mb-1">📝 תיאור</p>
+              <p className="text-sm text-neutral-600 whitespace-pre-wrap">{place.description}</p>
+            </div>
+          )}
+
+          {/* Website */}
+          {place.url && (
+            <a href={place.url} target="_blank" rel="noopener noreferrer"
+              className="block bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-sm text-blue-700 hover:bg-blue-100 transition-colors">
+              🌐 אתר רשמי ↗
+            </a>
+          )}
 
           {place.photos.length > 0 ? (
             <div>
@@ -760,6 +846,7 @@ export const MapPage: React.FC = () => {
   const { currentTrip, loadTrip } = useTripStore();
   const [places,        setPlaces]        = useState<Place[]>([]);
   const [loading,       setLoading]       = useState(true);
+  const [placesError,   setPlacesError]   = useState<string | null>(null);
   const [showAdd,       setShowAdd]       = useState(false);
   const [showReorder,   setShowReorder]   = useState(false);
   const [selected,      setSelected]      = useState<Place | null>(null);
@@ -770,7 +857,11 @@ export const MapPage: React.FC = () => {
   const mapRef       = useRef<google.maps.Map | null>(null);
   const centeredOnce = useRef(false);
 
-  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GKEY, libraries: LIBRARIES, language: 'he' });
+  const { isLoaded, loadError } = useJsApiLoader({ googleMapsApiKey: GKEY, libraries: LIBRARIES, language: 'he' });
+
+  useEffect(() => {
+    if (loadError) console.error('[MapPage] Google Maps load error:', loadError);
+  }, [loadError]);
 
   const tripDays = useMemo(
     () => buildTripDays(currentTrip?.startDate, currentTrip?.endDate),
@@ -780,13 +871,25 @@ export const MapPage: React.FC = () => {
 
   const fitVisible = (visible: Place[]) => {
     if (!mapRef.current || !window.google) return;
-    if (visible.length === 1) {
-      mapRef.current.panTo({ lat: visible[0].lat, lng: visible[0].lng });
+    const positioned = visible
+      .map(placePosition)
+      .filter((pos): pos is google.maps.LatLngLiteral => pos !== null);
+    if (!positioned.length) return;
+
+    // The bottom places panel covers part of the map — pad the bounds so
+    // markers stay in the visible area above it (clamped for small screens).
+    const mapDiv = mapRef.current.getDiv();
+    const panelCovers = places.length && !showAdd ? panelHeight : 0;
+    const bottomPad = Math.min(panelCovers + 60, Math.max(60, mapDiv.clientHeight - 160));
+
+    if (positioned.length === 1) {
+      mapRef.current.panTo(positioned[0]);
       mapRef.current.setZoom(13);
+      mapRef.current.panBy(0, panelCovers / 2);
     } else {
       const bounds = new window.google.maps.LatLngBounds();
-      visible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-      mapRef.current.fitBounds(bounds, 60);
+      positioned.forEach(pos => bounds.extend(pos));
+      mapRef.current.fitBounds(bounds, { top: 60, right: 50, bottom: bottomPad, left: 50 });
     }
   };
 
@@ -801,19 +904,35 @@ export const MapPage: React.FC = () => {
 
   useEffect(() => {
     if (!tripId) return;
-    if (!currentTrip) loadTrip(tripId);
+    let cancelled = false;
+    setLoading(true);
+    setPlacesError(null);
+    if (currentTrip?.id !== tripId) loadTrip(tripId);
     apiClient.get(`/api/places/${tripId}`)
-      .then(r => setPlaces(r.data.places))
-      .finally(() => setLoading(false));
-  }, [tripId]);
+      .then(r => {
+        if (cancelled) return;
+        setPlaces(Array.isArray(r.data.places) ? r.data.places : []);
+      })
+      .catch(err => {
+        console.error('[MapPage] Failed to load places:', err);
+        if (cancelled) return;
+        setPlaces([]);
+        setPlacesError('לא ניתן לטעון את המקומות כרגע');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tripId, currentTrip?.id, loadTrip]);
 
   // Markers: exclude hidden days, number each day independently from 1
   const visibleMarkers = useMemo(() => {
-    const result: { place: Place; num: number }[] = [];
+    const result: { place: Place; position: google.maps.LatLngLiteral; num: number }[] = [];
     const byDay = new Map<string, Place[]>();
     const undated: Place[] = [];
 
     places.forEach(p => {
+      if (!placePosition(p)) return;
       if (!p.date) { undated.push(p); return; }
       if (hiddenDays.has(p.date)) return;
       const arr = byDay.get(p.date) ?? [];
@@ -823,10 +942,16 @@ export const MapPage: React.FC = () => {
 
     byDay.forEach(dayPlaces =>
       dayPlaces.sort((a, b) => a.order - b.order)
-               .forEach((p, i) => result.push({ place: p, num: i + 1 }))
+               .forEach((p, i) => {
+                 const position = placePosition(p);
+                 if (position) result.push({ place: p, position, num: i + 1 });
+               })
     );
     undated.sort((a, b) => a.order - b.order)
-           .forEach((p, i) => result.push({ place: p, num: i + 1 }));
+           .forEach((p, i) => {
+             const position = placePosition(p);
+             if (position) result.push({ place: p, position, num: i + 1 });
+           });
 
     return result;
   }, [places, hiddenDays]);
@@ -839,10 +964,13 @@ export const MapPage: React.FC = () => {
   }, [places]);
 
   const center = useMemo(() => {
-    if (!places.length) return { lat: 31.5, lng: 35.0 };
+    const positioned = places
+      .map(placePosition)
+      .filter((pos): pos is google.maps.LatLngLiteral => pos !== null);
+    if (!positioned.length) return { lat: 31.5, lng: 35.0 };
     return {
-      lat: places.reduce((s, p) => s + p.lat, 0) / places.length,
-      lng: places.reduce((s, p) => s + p.lng, 0) / places.length,
+      lat: positioned.reduce((s, p) => s + p.lat, 0) / positioned.length,
+      lng: positioned.reduce((s, p) => s + p.lng, 0) / positioned.length,
     };
   }, [places]);
 
@@ -873,7 +1001,8 @@ export const MapPage: React.FC = () => {
   const handleAdded = (place: Place) => {
     setPlaces(prev => [...prev, place]);
     setShowAdd(false);
-    mapRef.current?.panTo({ lat: place.lat, lng: place.lng });
+    const position = placePosition(place);
+    if (position) mapRef.current?.panTo(position);
   };
 
   const handleDeleted    = (id: string) => { setPlaces(prev => prev.filter(p => p.id !== id)); setSelected(null); };
@@ -896,8 +1025,11 @@ export const MapPage: React.FC = () => {
 
   const handleListSelect = (place: Place) => {
     setSelected(place);
-    mapRef.current?.panTo({ lat: place.lat, lng: place.lng });
-    mapRef.current?.setZoom(14);
+    const position = placePosition(place);
+    if (position) {
+      mapRef.current?.panTo(position);
+      mapRef.current?.setZoom(14);
+    }
   };
 
   return (
@@ -929,28 +1061,55 @@ export const MapPage: React.FC = () => {
         )}
 
         {/* Google Map */}
-        {isLoaded && !loading ? (
-          <GoogleMap
-            mapContainerStyle={{ width: '100%', height: '100%' }}
-            center={mapReady ? undefined : center}
-            zoom={mapReady ? undefined : (places.length ? 10 : 7)}
-            options={MAP_OPTIONS}
-            onLoad={map => {
-              mapRef.current = map;
-              map.setOptions({ zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER } });
-              setMapReady(true);
-            }}
-            onClick={() => setDayFilterOpen(false)}>
-            {visibleMarkers.map(({ place, num }) => (
-              <Marker key={place.id}
-                position={{ lat: place.lat, lng: place.lng }}
-                icon={markerIcon(num, getPlaceColor(place), place.category)}
-                onClick={() => setSelected(place)}
-              />
-            ))}
-          </GoogleMap>
+        {loadError ? (
+          <div className="flex flex-col items-center justify-center h-full text-red-500 p-4 text-center">
+            <p className="text-lg font-bold mb-2">❌ שגיאה בטעינת המפה</p>
+            <p className="text-sm text-neutral-600">{loadError.message}</p>
+            <p className="text-xs text-neutral-400 mt-2">נא לבדוק את חיבור האינטרנט ולרענן את הדף</p>
+          </div>
+        ) : isLoaded ? (
+          <>
+            <GoogleMap
+              mapContainerStyle={{ width: '100%', height: '100%' }}
+              center={mapReady ? undefined : center}
+              zoom={mapReady ? undefined : (visibleMarkers.length ? 10 : 7)}
+              options={MAP_OPTIONS}
+              onLoad={map => {
+                mapRef.current = map;
+                map.setOptions({ zoomControlOptions: { position: window.google.maps.ControlPosition.RIGHT_CENTER } });
+                setMapReady(true);
+              }}
+              onClick={() => setDayFilterOpen(false)}>
+              {visibleMarkers.map(({ place, position, num }) => (
+                <Marker key={place.id}
+                  position={position}
+                  icon={markerIcon(num, getPlaceColor(place), place.category)}
+                  onClick={() => setSelected(place)}
+                />
+              ))}
+            </GoogleMap>
+            {loading && (
+              <div className="absolute inset-x-0 top-14 z-[450] flex justify-center pointer-events-none">
+                <div className="bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 shadow text-sm font-medium text-neutral-600">
+                  טוען מקומות...
+                </div>
+              </div>
+            )}
+            {placesError && (
+              <div className="absolute inset-x-4 top-14 z-[450] flex justify-center pointer-events-none">
+                <div className="bg-white/95 backdrop-blur-sm rounded-xl px-4 py-3 shadow text-sm font-medium text-red-600 text-center">
+                  {placesError}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="flex items-center justify-center h-full text-neutral-400">טוען מפה...</div>
+          <div className="flex items-center justify-center h-full text-neutral-400">
+            <div className="text-center">
+              <div className="text-3xl mb-2">🗺️</div>
+              <p>טוען מפה...</p>
+            </div>
+          </div>
         )}
 
         {/* Day filter — bottom left */}
