@@ -64,7 +64,6 @@ const COLORS: Record<string, { pill: string; event: string; border: string; text
 };
 
 const catLabel = (id: string) => CATS.find(c => c.id === id)?.label ?? id;
-const catColor = (cat: string) => CATS.find(c => c.id === cat)?.color ?? 'gray';
 const col = (color: string) => COLORS[color] ?? COLORS.gray;
 const mapPlaceCategory = (cat?: string) => {
   switch (cat) {
