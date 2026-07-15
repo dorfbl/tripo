@@ -1191,4 +1191,34 @@ function listDays(startDate: string, endDate: string): string[] {
   return days;
 }
 
+// ─── Place enrichment ─────────────────────────────────────────────────────────
+
+/** Generate a Hebrew description for a place from Google Places data */
+export async function generatePlaceDescription(opts: {
+  name: string;
+  location?: string | null;
+  types?: string[];
+  rating?: number | null;
+}): Promise<string | null> {
+  const { name, location, types, rating } = opts;
+
+  const system = `אתה כותב תיאורים קצרים (1-2 משפטים) של מקומות לאפליקציית טיולים.
+התיאור צריך להיות בעברית, אינפורמטיבי ומעניין.
+ציין מה המקום, למה הוא שווה ביקור, וטיפ מעשי אחד (שעות פתיחה מומלצות, להזמין מראש, וכו').
+התשובה חייבת להיות רק התיאור עצמו, ללא כותרות או עיטורים.`;
+
+  const typesStr = types?.length ? types.slice(0, 5).join(', ') : 'לא ידוע';
+  const ratingStr = rating ? `דירוג: ${rating}/5` : '';
+  const locationStr = location ? `מיקום: ${location}` : '';
+
+  const user = `שם: ${name}
+${locationStr}
+סוג: ${typesStr}
+${ratingStr}
+
+כתוב תיאור קצר (1-2 משפטים) בעברית:`;
+
+  return completeText(system, user, 200, 'place_description');
+}
+
 export { completeText };

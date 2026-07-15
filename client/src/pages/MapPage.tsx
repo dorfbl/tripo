@@ -104,7 +104,23 @@ interface Place {
   estimatedDuration?: string | null;
   photos: PlacePhoto[];
 }
-interface GeoResult { placeId?: string; lat?: number; lng?: number; name: string; subtitle: string }
+interface GeoResult {
+  placeId?: string;
+  lat?: number;
+  lng?: number;
+  name: string;
+  subtitle: string;
+  nameOriginal?: string;
+  location?: string;
+  rating?: number;
+  ratingCount?: number;
+  openingHours?: any;
+  url?: string;
+  mapsUrl?: string;
+  cost?: string;
+  estimatedDuration?: string;
+  types?: string[];
+}
 
 const placePosition = (place: Place): google.maps.LatLngLiteral | null => {
   const lat = Number(place.lat);
@@ -117,7 +133,7 @@ async function searchPlaces(q: string): Promise<GeoResult[]> {
   try { return (await apiClient.get(`/api/geocode/search?q=${encodeURIComponent(q)}`)).data.results ?? []; }
   catch { return []; }
 }
-async function fetchPlaceCoords(placeId: string): Promise<{ lat: number; lng: number; name: string } | null> {
+async function fetchPlaceCoords(placeId: string): Promise<GeoResult | null> {
   try { return (await apiClient.get(`/api/geocode/details/${placeId}`)).data; }
   catch { return null; }
 }
@@ -191,7 +207,6 @@ const AddPlaceModal: React.FC<AddPlaceModalProps> = ({ tripId, tripDays, onClose
   const [suggestions, setSuggestions] = useState<GeoResult[]>([]);
   const [searching,   setSearching]   = useState(false);
   const [selected,    setSelected]    = useState<GeoResult | null>(null);
-  const [name,        setName]        = useState('');
   const [notes,       setNotes]       = useState('');
   const [date,        setDate]        = useState<string | null>(null);
   const [category,    setCategory]    = useState('other');
@@ -214,24 +229,37 @@ const AddPlaceModal: React.FC<AddPlaceModalProps> = ({ tripId, tripDays, onClose
 
   const handlePick = async (r: GeoResult) => {
     setSuggestions([]); setQuery(r.name);
-    if (!name) setName(r.name);
-    if (r.lat != null && r.lng != null) { setSelected(r); return; }
+    if (r.lat != null && r.lng != null && !r.placeId) { setSelected(r); return; }
     if (!r.placeId) return;
     setResolving(true);
     const det = await fetchPlaceCoords(r.placeId);
     setResolving(false);
     if (!det) { setError('לא ניתן לקבל מיקום'); return; }
-    setSelected({ ...r, lat: det.lat, lng: det.lng });
-    if (!name) setName(det.name || r.name);
+    setSelected({ ...r, ...det, lat: det.lat!, lng: det.lng! });
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { setError('שם המקום חסר'); return; }
+    if (!selected?.name) { setError('בחר מקום מהרשימה'); return; }
     if (!selected?.lat) { setError('בחר מקום מהרשימה'); return; }
     setSaving(true);
     try {
       const res = await apiClient.post(`/api/places/${tripId}`, {
-        name: name.trim(), lat: selected.lat, lng: selected.lng, notes, date: date || undefined, category,
+        nameOriginal: selected.nameOriginal || selected.name,
+        lat: selected.lat,
+        lng: selected.lng,
+        notes,
+        date: date || undefined,
+        category,
+        placeId: selected.placeId,
+        location: selected.location,
+        rating: selected.rating,
+        ratingCount: selected.ratingCount,
+        openingHours: selected.openingHours,
+        url: selected.url,
+        mapsUrl: selected.mapsUrl,
+        cost: selected.cost,
+        estimatedDuration: selected.estimatedDuration,
+        types: selected.types,
       });
       onAdded(res.data.place);
     } catch { setError('שגיאה בשמירה'); }
@@ -275,17 +303,12 @@ const AddPlaceModal: React.FC<AddPlaceModalProps> = ({ tripId, tripDays, onClose
             <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
               <span className="text-green-500">✓</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-green-800 truncate">{selected.name}</p>
-                <p className="text-xs text-green-600 truncate">{selected.subtitle}</p>
+                <p className="text-sm font-medium text-green-800 truncate">{selected.nameOriginal || selected.name}</p>
+                <p className="text-xs text-green-600 truncate">{selected.location || selected.subtitle}</p>
               </div>
               <button onClick={() => { setSelected(null); setQuery(''); }} className="text-green-400 text-lg leading-none">×</button>
             </div>
           )}
-          <div>
-            <label className="text-sm font-medium text-neutral-700 block mb-1.5">שם לתצוגה</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="שם המקום"
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
           <div>
             <label className="text-sm font-medium text-neutral-700 block mb-1.5">הערות (אופציונלי)</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
@@ -305,7 +328,7 @@ const AddPlaceModal: React.FC<AddPlaceModalProps> = ({ tripId, tripDays, onClose
         </div>
         <div className="flex-shrink-0 px-5 py-4 border-t border-neutral-100">
           <button onClick={handleSave}
-            disabled={saving || resolving || !selected || selected.lat == null || !name.trim()}
+            disabled={saving || resolving || !selected || selected.lat == null}
             className="w-full py-3 bg-brand-500 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
             {saving ? 'שומר...' : '+ הוסף למסלול'}
           </button>

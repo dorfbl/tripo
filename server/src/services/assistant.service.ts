@@ -22,7 +22,7 @@ export async function buildAssistantTips(tripId: string): Promise<AssistantTip[]
     where: { id: tripId },
     include: {
       members: { include: { user: { select: { id: true, name: true } } } },
-      places: { orderBy: { createdAt: 'asc' }, take: 5 },
+      places: { orderBy: { createdAt: 'asc' }, take: 30 },
       decisions: { include: { votes: true } },
       expenses: { orderBy: { expenseDate: 'desc' }, take: 20 },
       links: { where: { type: 'FLIGHT' }, take: 10 },
@@ -107,7 +107,9 @@ export async function buildAssistantTips(tripId: string): Promise<AssistantTip[]
 
   // ── Weather rain tomorrow ──
   try {
-    const place = trip.places.find((p) => p.lat != null && p.lng != null);
+    const placesWithCoords = trip.places.filter((p) => p.lat != null && p.lng != null);
+    const place =
+      placesWithCoords.find((p) => p.category === 'hotel') || placesWithCoords[0];
     if (place) {
       const weather = await fetchWeatherForecast(
         place.lat,

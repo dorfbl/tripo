@@ -71,8 +71,23 @@ router.get('/details/:placeId', authenticateToken, async (req: Request, res: Res
   if (!KEY) { res.status(500).json({ error: 'Google Maps key לא מוגדר' }); return; }
 
   try {
+    const fields = [
+      'geometry',
+      'name',
+      'formatted_address',
+      'rating',
+      'user_ratings_total',
+      'opening_hours',
+      'website',
+      'url',
+      'price_level',
+      'types',
+      'international_phone_number',
+      'formatted_phone_number',
+    ].join(',');
+
     const url = `https://maps.googleapis.com/maps/api/place/details/json` +
-      `?place_id=${placeId}&key=${KEY}&fields=geometry,name&language=he`;
+      `?place_id=${placeId}&key=${KEY}&fields=${fields}&language=he`;
     const r = await fetch(url, {
       headers: { 'Referer': 'https://trip.kefar-sava.co.il/' },
     });
@@ -82,8 +97,53 @@ router.get('/details/:placeId', authenticateToken, async (req: Request, res: Res
       res.status(502).json({ error: 'לא ניתן לקבל פרטי מקום' }); return;
     }
 
-    const loc = data.result.geometry.location;
-    res.json({ lat: loc.lat, lng: loc.lng, name: data.result.name });
+    const result = data.result;
+    const loc = result.geometry?.location;
+
+    // Parse opening hours
+    let openingHours = null;
+    if (result.opening_hours?.open_now === true) {
+      openingHours = null; // null = 24/7
+    } else if (result.opening_hours?.weekday_text) {
+      openingHours = { weekday_text: result.opening_hours.weekday_text };
+    }
+
+    // Estimate duration based on place type
+    let estimatedDuration = null;
+    const types = result.types || [];
+    if (types.includes('restaurant') || types.includes('cafe') || types.includes('bar')) {
+      estimatedDuration = '1-2 שעות';
+    } else if (types.includes('museum') || types.includes('art_gallery')) {
+      estimatedDuration = '2-3 שעות';
+    } else if (types.includes('park') || types.includes('tourist_attraction')) {
+      estimatedDuration = '1-3 שעות';
+    } else if (types.includes('shopping_mall') || types.includes('store')) {
+      estimatedDuration = '1-2 שעות';
+    }
+
+    // Cost based on price_level
+    let cost = null;
+    if (result.price_level != null) {
+      const priceLevels = ['זול', 'בינוני', 'יקר', 'יקר מאוד'];
+      cost = priceLevels[Math.min(result.price_level - 1, 3)] || null;
+    }
+
+    res.json({
+      placeId,
+      lat: loc?.lat || null,
+      lng: loc?.lng || null,
+      name: result.name || null,
+      nameOriginal: result.name || null,
+      location: result.formatted_address || null,
+      rating: result.rating || null,
+      ratingCount: result.user_ratings_total || null,
+      openingHours,
+      url: result.website || null,
+      mapsUrl: result.url || null,
+      cost,
+      estimatedDuration,
+      types: result.types || [],
+    });
   } catch (err) {
     console.error('[geocode] details error:', err);
     res.status(500).json({ error: 'שגיאה בקבלת פרטי מקום' });

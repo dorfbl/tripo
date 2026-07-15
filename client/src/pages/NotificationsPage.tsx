@@ -97,6 +97,20 @@ export const NotificationsPage: React.FC = () => {
     }
   };
 
+  const dismiss = async (n: AppNotification, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const prevItems = items;
+    const prevUnread = unreadCount;
+    setItems((prev) => prev.filter((x) => x.id !== n.id));
+    if (!n.isRead) setUnreadCount((c) => Math.max(0, c - 1));
+    try {
+      await apiClient.delete(`/api/notifications/${n.id}`);
+    } catch {
+      setItems(prevItems);
+      setUnreadCount(prevUnread);
+    }
+  };
+
   return (
     <AppShell showBottomNav>
       <div className="flex items-start justify-between gap-2 mb-4">
@@ -161,44 +175,58 @@ export const NotificationsPage: React.FC = () => {
       ) : (
         <div className="flex flex-col gap-2">
           {items.map((n) => (
-            <button
+            <div
               key={n.id}
-              type="button"
-              onClick={() => openItem(n)}
-              className={`text-right w-full rounded-2xl border p-3.5 transition-colors ${
+              className={`relative w-full rounded-2xl border p-3.5 transition-colors ${
                 n.isRead
                   ? 'bg-white border-neutral-100'
                   : 'bg-brand-50/50 border-brand-100'
               }`}
             >
-              <div className="flex items-start gap-2.5">
-                <span className="text-xl leading-none mt-0.5">{n.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-sm font-semibold text-neutral-900">{n.title}</p>
-                    {n.aiGenerated && (
-                      <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">
-                        AI
-                      </span>
+              <button
+                type="button"
+                onClick={() => openItem(n)}
+                className="text-right w-full pl-6"
+              >
+                <div className="flex items-start gap-2.5">
+                  <span className="text-xl leading-none mt-0.5">{n.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-semibold text-neutral-900">{n.title}</p>
+                      {n.aiGenerated && (
+                        <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">
+                          AI
+                        </span>
+                      )}
+                      {!n.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
+                      )}
+                    </div>
+                    {n.body && (
+                      <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">{n.body}</p>
                     )}
-                    {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
-                    )}
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {new Date(n.createdAt).toLocaleString('he-IL', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
                   </div>
-                  {n.body && (
-                    <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed">{n.body}</p>
-                  )}
-                  <p className="text-[11px] text-neutral-400 mt-1">
-                    {new Date(n.createdAt).toLocaleString('he-IL', {
-                      day: 'numeric',
-                      month: 'short',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
                 </div>
-              </div>
-            </button>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => dismiss(n, e)}
+                aria-label="הסר התראה"
+                className="absolute top-2.5 left-2.5 w-6 h-6 flex items-center justify-center rounded-full text-neutral-400 active:bg-neutral-100"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
           ))}
         </div>
       )}

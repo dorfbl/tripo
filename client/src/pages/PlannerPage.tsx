@@ -1638,27 +1638,87 @@ const ActivityModal: React.FC<{
   onDelete?: (id: string) => Promise<void>;
   onClose: () => void;
 }> = ({ activity, tripId, onSave, onDelete, onClose }) => {
-  const [name, setName]         = useState(activity?.name ?? '');
-  const [emoji, setEmoji]       = useState(activity?.emoji ?? '📌');
-  const [location, setLocation] = useState(activity?.location ?? '');
-  const [desc, setDesc]         = useState(activity?.description ?? '');
-  const [dur, setDur]           = useState(String(activity?.durationMins ?? 60));
-  const [cost, setCost]         = useState(activity?.cost ?? '');
-  const [category, setCategory] = useState(activity?.category ?? 'other');
-  const [mapsUrl, setMapsUrl]   = useState(activity?.mapsUrl ?? '');
-  const [url, setUrl]           = useState(activity?.url ?? '');
+  // Autocomplete state (only for new activities)
+  const [query, setQuery]           = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [searching, setSearching]   = useState(false);
+  const [selected, setSelected]     = useState<any>(null);
+  const [resolving, setResolving]   = useState(false);
+  const [error, setError]           = useState('');
+  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [notes, setNotes]       = useState('');
+  const [category, setCategory] = useState('other');
   const [saving, setSaving]     = useState(false);
   const [files, setFiles]       = useState<ActivityFile[]>(activity?.files ?? []);
   const [uploading, setUploading] = useState(false);
 
-  const color = catColor(category);
+  const handleQuery = async (val: string) => {
+    setQuery(val); setSelected(null); setSuggestions([]); setError('');
+    if (debRef.current) clearTimeout(debRef.current);
+    if (val.trim().length < 2) return;
+    debRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await apiClient.get(`/api/geocode/search?q=${encodeURIComponent(val.trim())}`);
+        const results = res.data.results ?? [];
+        setSuggestions(results);
+        if (!results.length) setError('לא נמצאו תוצאות');
+      } catch { setSuggestions([]); }
+      finally { setSearching(false); }
+    }, 450);
+  };
+
+  const handlePick = async (r: any) => {
+    setSuggestions([]); setQuery(r.name);
+    if (r.lat != null && r.lng != null && !r.placeId) { setSelected(r); return; }
+    if (!r.placeId) return;
+    setResolving(true);
+    try {
+      const det = await apiClient.get(`/api/geocode/details/${r.placeId}`);
+      const data = det.data;
+      setSelected({ ...r, ...data, lat: data.lat, lng: data.lng });
+    } catch {
+      setError('לא ניתן לקבל מיקום');
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    // When editing — just close
+    if (activity) {
+      onClose();
+      return;
+    }
+
+    // When creating — validate and save
+    if (!selected?.name) { setError('בחר מקום מהרשימה'); return; }
     setSaving(true);
     try {
-      await onSave({ id: activity?.id, name, emoji, location: location || undefined, description: desc || undefined, durationMins: parseInt(dur) || 60, cost: cost || undefined, category, mapsUrl: mapsUrl || undefined, url: url || undefined, color });
-    } finally { setSaving(false); }
+      await onSave({
+        nameOriginal: selected.nameOriginal || selected.name,
+        emoji: '📌',
+        location: selected.location,
+        notes,
+        category,
+        placeId: selected.placeId,
+        lat: selected.lat,
+        lng: selected.lng,
+        openingHours: selected.openingHours,
+        rating: selected.rating,
+        ratingCount: selected.ratingCount,
+        url: selected.url,
+        mapsUrl: selected.mapsUrl,
+        cost: selected.cost,
+        estimatedDuration: selected.estimatedDuration,
+        types: selected.types,
+      });
+    } catch {
+      setError('שגיאה בשמירה');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1688,60 +1748,111 @@ const ActivityModal: React.FC<{
     <ModalOverlay onClose={onClose}>
       <h2 className="text-lg font-bold text-neutral-900 mb-4">{activity ? 'עריכת פעילות' : 'פעילות חדשה'}</h2>
       <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input value={emoji} onChange={e => setEmoji(e.target.value)} className="w-16 text-center text-2xl border border-neutral-200 rounded-xl p-2" maxLength={2} />
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="שם הפעילות *" className={`flex-1 ${inp}`} />
-        </div>
-        <input value={location} onChange={e => setLocation(e.target.value)} placeholder="מיקום (אופציונלי)" className={inp} />
-        <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="תיאור קצר (אופציונלי)" rows={2} className={`${inp} resize-none`} />
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="text-xs text-neutral-500 mb-1 block">משך (דקות)</label>
-            <input type="number" value={dur} onChange={e => setDur(e.target.value)} min={15} step={15} className={`w-full ${inp}`} />
-          </div>
-          <div className="flex-1">
-            <label className="text-xs text-neutral-500 mb-1 block">מחיר</label>
-            <input value={cost} onChange={e => setCost(e.target.value)} placeholder="חינם / €15" className={`w-full ${inp}`} />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs text-neutral-500 mb-1.5 block">קטגוריה</label>
-          <div className="flex flex-wrap gap-1.5">
-            {CATS.map(c => (
-              <button key={c.id} onClick={() => setCategory(c.id)} className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${category === c.id ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-neutral-200 text-neutral-600'}`}>{c.label}</button>
-            ))}
-          </div>
-        </div>
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="🔗 קישור כללי (אופציונלי)" className={inp} />
-        <input value={mapsUrl} onChange={e => setMapsUrl(e.target.value)} placeholder="🗺️ קישור Google Maps (אופציונלי)" className={inp} />
-
-        {/* Files — only when editing */}
-        {activity ? (
-          <div>
-            <label className="text-xs text-neutral-500 mb-1.5 block">קבצים מצורפים</label>
-            {files.length > 0 && (
-              <div className="flex flex-col gap-1 mb-2">
-                {files.map(f => {
-                  const isImage = f.mimeType.startsWith('image/');
-                  const href = `/uploads/planner/${f.filename}`;
-                  return (
-                    <div key={f.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-2 py-1.5">
-                      {isImage && <img src={href} alt={f.originalName} className="w-8 h-8 object-cover rounded" />}
-                      {!isImage && <span className="text-base">📄</span>}
-                      <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate flex-1">{f.originalName}</a>
-                      <button onClick={() => handleDeleteFile(f.id)} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0">✕</button>
-                    </div>
-                  );
-                })}
+        {/* Autocomplete search — only when creating new activity */}
+        {!activity && (
+          <>
+            <div>
+              <label className="text-xs font-medium text-neutral-500 mb-1.5 block">חיפוש מקום</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => handleQuery(e.target.value)}
+                  placeholder="מגדל אייפל, יורו דיסני..."
+                  autoComplete="off"
+                  className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 pl-8"
+                />
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 text-sm pointer-events-none">
+                  {(searching || resolving) ? '⟳' : '🔍'}
+                </span>
+              </div>
+              {suggestions.length > 0 && (
+                <div className="mt-1 border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                  {suggestions.map((r, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handlePick(r)}
+                      className="w-full flex flex-col items-start px-4 py-3 hover:bg-brand-50 border-b border-neutral-100 last:border-0 text-right"
+                    >
+                      <span className="text-sm font-medium text-neutral-900">{r.name}</span>
+                      <span className="text-xs text-neutral-400 mt-0.5">{r.subtitle}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {selected && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                <span className="text-green-500">✓</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-green-800 truncate">{selected.nameOriginal || selected.name}</p>
+                  <p className="text-xs text-green-600 truncate">{selected.location || selected.subtitle}</p>
+                </div>
+                <button onClick={() => { setSelected(null); setQuery(''); }} className="text-green-400 text-lg leading-none">×</button>
               </div>
             )}
-            <label className="flex items-center gap-2 cursor-pointer text-xs text-brand-500 font-medium hover:text-brand-700">
-              <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*,.pdf" disabled={uploading} />
-              {uploading ? '⏳ מעלה...' : '+ הוסף קובץ (תמונה / PDF)'}
-            </label>
-          </div>
-        ) : (
-          <p className="text-xs text-neutral-400">ניתן לצרף קבצים לאחר שמירה</p>
+            <div>
+              <label className="text-xs font-medium text-neutral-500 mb-1.5 block">הערות (אופציונלי)</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                rows={2}
+                className={`w-full ${inp} resize-none`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-neutral-500 mb-1.5 block">קטגוריה</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CATS.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategory(c.id)}
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${
+                      category === c.id
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-neutral-200 text-neutral-600'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {error && !suggestions.length && <p className="text-sm text-red-500">{error}</p>}
+          </>
+        )}
+
+        {/* When editing existing activity — show all fields */}
+        {activity && (
+          <>
+            <p className="text-sm text-neutral-600 mb-2">
+              <span className="font-semibold">{activity.name}</span>
+              {activity.location && <span className="text-xs text-neutral-400 block mt-0.5">{activity.location}</span>}
+            </p>
+            <div>
+              <label className="text-xs text-neutral-500 mb-1.5 block">קבצים מצורפים</label>
+              {files.length > 0 && (
+                <div className="flex flex-col gap-1 mb-2">
+                  {files.map(f => {
+                    const isImage = f.mimeType.startsWith('image/');
+                    const href = `/uploads/planner/${f.filename}`;
+                    return (
+                      <div key={f.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-2 py-1.5">
+                        {isImage && <img src={href} alt={f.originalName} className="w-8 h-8 object-cover rounded" />}
+                        {!isImage && <span className="text-base">📄</span>}
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate flex-1">{f.originalName}</a>
+                        <button onClick={() => handleDeleteFile(f.id)} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0">✕</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-brand-500 font-medium hover:text-brand-700">
+                <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*,.pdf" disabled={uploading} />
+                {uploading ? '⏳ מעלה...' : '+ הוסף קובץ (תמונה / PDF)'}
+              </label>
+            </div>
+          </>
         )}
       </div>
 
@@ -1750,8 +1861,12 @@ const ActivityModal: React.FC<{
           <button onClick={() => { if (confirm('למחוק פעילות?')) onDelete(activity.id); }} className="text-sm text-red-400 px-3 py-2 rounded-xl hover:bg-red-50">מחק</button>
         )}
         <button onClick={onClose} className="flex-1 text-sm text-neutral-600 border border-neutral-200 rounded-xl py-2.5">ביטול</button>
-        <button onClick={handleSave} disabled={saving || !name.trim()} className="flex-1 text-sm font-bold bg-brand-500 text-white rounded-xl py-2.5 disabled:opacity-50 hover:bg-brand-600">
-          {saving ? 'שומר...' : 'שמור'}
+        <button
+          onClick={handleSave}
+          disabled={saving || resolving || (!activity && !selected)}
+          className="flex-1 text-sm font-bold bg-brand-500 text-white rounded-xl py-2.5 disabled:opacity-50 hover:bg-brand-600"
+        >
+          {saving ? 'שומר...' : activity ? 'סגור' : '+ הוסף פעילות'}
         </button>
       </div>
     </ModalOverlay>

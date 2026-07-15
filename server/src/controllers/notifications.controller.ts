@@ -11,16 +11,18 @@ export const listNotifications = async (req: AuthRequest, res: Response): Promis
     const unreadOnly = String(req.query.unread || '') === '1';
     const tripId = req.query.tripId ? String(req.query.tripId) : null;
 
-    // Drop stale hours alerts + duplicate smart tips (hotel/flight etc.)
+    // Drop stale hours alerts + duplicate/resolved smart tips (hotel/flight/weather etc.)
     try {
       const {
         purgeStaleHoursNotifications,
         purgeDuplicateSmartNotifications,
+        purgeResolvedSmartNotifications,
       } = await import('../services/notifications.service');
       if (tripId) {
         await Promise.all([
           purgeStaleHoursNotifications({ tripId, userId }),
           purgeDuplicateSmartNotifications({ tripId, userId }),
+          purgeResolvedSmartNotifications({ tripId, userId }),
         ]);
       } else {
         // Active trips for this user (cap) — keep list snappy
@@ -34,6 +36,7 @@ export const listNotifications = async (req: AuthRequest, res: Response): Promis
           memberships.flatMap((m) => [
             purgeStaleHoursNotifications({ tripId: m.tripId, userId }),
             purgeDuplicateSmartNotifications({ tripId: m.tripId, userId }),
+            purgeResolvedSmartNotifications({ tripId: m.tripId, userId }),
           ]),
         );
       }
@@ -87,6 +90,25 @@ export const markRead = async (req: AuthRequest, res: Response): Promise<void> =
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'שגיאה בעדכון התראה' });
+  }
+};
+
+export const deleteNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId!;
+    const { id } = req.params as { id: string };
+
+    const n = await prisma.notification.findFirst({ where: { id, userId } });
+    if (!n) {
+      res.status(404).json({ error: 'התראה לא נמצאה' });
+      return;
+    }
+
+    await prisma.notification.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה במחיקת התראה' });
   }
 };
 

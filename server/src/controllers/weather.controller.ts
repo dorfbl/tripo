@@ -26,10 +26,13 @@ export const getTripWeather = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Prefer query lat/lng, then first map place, then Munich default for demo trips
+    // Prefer query lat/lng, then the trip's hotel (best signal for "where we are"),
+    // then the first map place, then Munich default for demo trips
     const qLat = req.query.lat != null ? Number(req.query.lat) : null;
     const qLng = req.query.lng != null ? Number(req.query.lng) : null;
-    const place = trip.places.find((p) => p.lat != null && p.lng != null);
+    const withCoords = trip.places.filter((p) => p.lat != null && p.lng != null);
+    const place =
+      withCoords.find((p) => p.category === 'hotel') || withCoords[0];
 
     const lat = qLat ?? place?.lat ?? 48.1351;
     const lng = qLng ?? place?.lng ?? 11.582;

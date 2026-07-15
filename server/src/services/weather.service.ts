@@ -59,14 +59,28 @@ export async function fetchWeatherForecast(
   locationLabel = 'יעד הטיול',
 ): Promise<WeatherBundle> {
   const today = new Date();
-  const start =
-    startDate?.slice(0, 10) ||
-    today.toISOString().slice(0, 10);
-  const endDefault = new Date(today);
-  endDefault.setDate(endDefault.getDate() + 7);
-  const end =
-    endDate?.slice(0, 10) ||
-    endDefault.toISOString().slice(0, 10);
+  const todayKeyStr = today.toISOString().slice(0, 10);
+  const maxEnd = new Date(today);
+  maxEnd.setDate(maxEnd.getDate() + 15);
+  const maxEndKeyStr = maxEnd.toISOString().slice(0, 10);
+
+  const defaultEnd = new Date(today);
+  defaultEnd.setDate(defaultEnd.getDate() + 7);
+
+  // Open-Meteo's forecast endpoint only covers ~16 days from today.
+  // If the trip's dates fall outside that window (e.g. a trip months away),
+  // fall back to the forecast window so we still show current conditions
+  // at the destination instead of failing outright.
+  const tripStart = startDate?.slice(0, 10) || todayKeyStr;
+  const tripEnd = endDate?.slice(0, 10) || defaultEnd.toISOString().slice(0, 10);
+  const tripOutOfRange = tripStart > maxEndKeyStr || tripEnd < todayKeyStr;
+
+  const start = tripOutOfRange ? todayKeyStr : tripStart;
+  const end = tripOutOfRange
+    ? maxEndKeyStr
+    : tripEnd > maxEndKeyStr
+      ? maxEndKeyStr
+      : tripEnd;
 
   const url =
     `https://api.open-meteo.com/v1/forecast` +

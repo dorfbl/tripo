@@ -463,6 +463,51 @@ export async function generateSmartNotificationsForUser(
   );
 }
 
+/**
+ * Delete unread smart notifications whose underlying issue is no longer
+ * present in the trip's current tips (e.g. rain warning after the forecast
+ * changed, missing-hotel after a link was added).
+ */
+export async function purgeResolvedSmartNotifications(opts: {
+  tripId: string;
+  userId: string;
+  tips?: AssistantTip[];
+}): Promise<number> {
+  const { tripId, userId } = opts;
+  try {
+    const tips = opts.tips ?? (await buildAssistantTips(tripId));
+
+    const currentKeys = new Set<string>();
+    for (const t of tips) {
+      const key = classifySmartKey(t.id, t.title, t.body) || t.id;
+      currentKeys.add(key);
+    }
+
+    const unreadSmart = await prisma.notification.findMany({
+      where: { userId, tripId, isRead: false },
+      select: { id: true, title: true, body: true, metadata: true },
+    });
+
+    const toResolve: string[] = [];
+    for (const n of unreadSmart) {
+      const meta = n.metadata as any;
+      if (meta?.kind !== 'smart') continue; // only auto-dismiss smart notifications
+      const key = (meta?.smartKey as string) || classifySmartKey(meta?.tipId, n.title, n.body);
+      if (key && !currentKeys.has(key)) {
+        toResolve.push(n.id);
+      }
+    }
+
+    if (!toResolve.length) return 0;
+    await prisma.notification.deleteMany({ where: { id: { in: toResolve } } });
+    console.log(`[notifications] auto-deleted ${toResolve.length} resolved smart notifications`);
+    return toResolve.length;
+  } catch (err) {
+    console.error('[notifications] purgeResolvedSmartNotifications failed:', err);
+    return 0;
+  }
+}
+
 async function generateSmartNotificationsForUserUnlocked(
   tripId: string,
   userId: string,
@@ -478,41 +523,7 @@ async function generateSmartNotificationsForUserUnlocked(
   dismissed += await purgeDuplicateSmartNotifications({ tripId, userId });
 
   const tips = await buildAssistantTips(tripId);
-
-  // Build set of current active smart keys
-  const currentKeys = new Set<string>();
-  for (const t of tips) {
-    const key = classifySmartKey(t.id, t.title, t.body) || t.id;
-    currentKeys.add(key);
-  }
-
-  // Auto-dismiss unread smart notifications that are now resolved (not in current tips)
-  const unreadSmart = await prisma.notification.findMany({
-    where: {
-      userId,
-      tripId,
-      isRead: false,
-    },
-    select: { id: true, title: true, body: true, metadata: true },
-  });
-
-  const toResolve: string[] = [];
-  for (const n of unreadSmart) {
-    const meta = n.metadata as any;
-    if (meta?.kind !== 'smart') continue; // only auto-dismiss smart notifications
-    const key = (meta?.smartKey as string) || classifySmartKey(meta?.tipId, n.title, n.body);
-    if (key && !currentKeys.has(key)) {
-      toResolve.push(n.id);
-    }
-  }
-
-  if (toResolve.length) {
-    await prisma.notification.deleteMany({
-      where: { id: { in: toResolve } },
-    });
-    dismissed += toResolve.length;
-    console.log(`[notifications] auto-deleted ${toResolve.length} resolved smart notifications`);
-  }
+  dismissed += await purgeResolvedSmartNotifications({ tripId, userId, tips });
 
   if (!tips.length) return { created: 0, ai: false, skipped: 0, dismissed };
 

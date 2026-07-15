@@ -330,23 +330,80 @@ export const createActivity = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { tripId } = req.params as { tripId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const { name, emoji, location, description, durationMins, cost, category, mapsUrl, url, color } = req.body;
-    if (!name?.trim()) { res.status(400).json({ error: 'שם שדה חובה' }); return; }
+    const {
+      nameOriginal,
+      emoji,
+      location,
+      description,
+      notes,
+      durationMins,
+      cost,
+      category,
+      mapsUrl,
+      url,
+      color,
+      placeId,
+      lat,
+      lng,
+      openingHours,
+      rating,
+      ratingCount,
+      estimatedDuration,
+      types,
+    } = req.body;
+    if (!nameOriginal?.trim()) { res.status(400).json({ error: 'שם שדה חובה' }); return; }
 
-    // NEW SCHEMA: Create Place directly
+    // Generate Hebrew description if not provided (and we have placeId)
+    let generatedDescription = description?.trim() || notes?.trim() || null;
+    if (!generatedDescription && placeId) {
+      const { generatePlaceDescription } = await import('../services/ai.service');
+      try {
+        const aiDesc = await generatePlaceDescription({
+          name: nameOriginal.trim(),
+          location: location?.trim() || null,
+          types: types || [],
+          rating: rating != null ? Number(rating) : null,
+        });
+        if (aiDesc) generatedDescription = aiDesc;
+      } catch (err) {
+        console.error('[createActivity] Failed to generate description:', err);
+        // Continue without description — not critical
+      }
+    }
+
+    // Parse duration from estimatedDuration if provided
+    let durationMinutes = durationMins ?? 60;
+    if (estimatedDuration && !durationMins) {
+      const match = estimatedDuration.match(/(\d+)(?:-(\d+))?\s*שע/);
+      if (match) {
+        const min = parseInt(match[1], 10);
+        const max = match[2] ? parseInt(match[2], 10) : min;
+        durationMinutes = ((min + max) / 2) * 60;
+      }
+    }
+
+    // NEW SCHEMA: Create Place directly with ALL fields from Google Places API
     const place = await prisma.place.create({
       data: {
         tripId,
-        name: name.trim(),
+        name: nameOriginal.trim(),
+        nameOriginal: nameOriginal.trim(),
         emoji: emoji || '📌',
         location: location || null,
-        description: description || null,
-        durationMins: durationMins ?? 60,
+        description: generatedDescription,
+        durationMins: durationMinutes,
+        estimatedDuration: estimatedDuration || null,
         cost: cost || null,
         category: category || 'other',
         mapsUrl: mapsUrl || null,
         url: url || null,
         color: color || 'blue',
+        placeId: placeId || null,
+        lat: lat != null ? Number(lat) : null,
+        lng: lng != null ? Number(lng) : null,
+        openingHours: openingHours || null,
+        rating: rating != null ? Number(rating) : null,
+        ratingCount: ratingCount != null ? Number(ratingCount) : null,
       },
       include: { files: true, votes: true },
     });
@@ -355,15 +412,21 @@ export const createActivity = async (req: AuthRequest, res: Response): Promise<v
       id: place.id,
       tripId: place.tripId,
       name: place.name,
+      nameOriginal: place.nameOriginal,
       emoji: place.emoji,
       location: place.location,
       description: place.description,
       durationMins: place.durationMins,
+      estimatedDuration: place.estimatedDuration,
       cost: place.cost,
       category: place.category,
       mapsUrl: place.mapsUrl,
       url: place.url,
       color: place.color,
+      placeId: place.placeId,
+      openingHours: place.openingHours,
+      rating: place.rating,
+      ratingCount: place.ratingCount,
       createdAt: place.createdAt,
       files: place.files,
       votes: place.votes,

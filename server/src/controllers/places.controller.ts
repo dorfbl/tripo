@@ -7,6 +7,16 @@ import { AuthRequest } from '../middleware/auth';
 import { timelinePlaceAdded, timelinePhotoUploaded } from '../services/timeline.service';
 import { clearHoursNotificationsForEvent } from '../services/notifications.service';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+/** Parse duration string like "1-2 שעות" to minutes (average). */
+function parseDurationToMinutes(duration: string): number {
+  const match = duration.match(/(\d+)(?:-(\d+))?\s*שע/);
+  if (!match) return 60; // default
+  const min = parseInt(match[1], 10);
+  const max = match[2] ? parseInt(match[2], 10) : min;
+  return ((min + max) / 2) * 60;
+}
+
 // ─── Map ⇄ Scheduler sync ────────────────────────────────────────────────────
 // The scheduler (ScheduledEvent) is the single source of truth for which day a
 // place belongs to and its order within the day. The map derives day + order
@@ -210,27 +220,76 @@ export const getPlaces = async (req: AuthRequest, res: Response): Promise<void> 
 export const addPlace = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { tripId } = req.params as { tripId: string };
-    const { name, lat, lng, notes, mapsUrl, url, date, category } = req.body;
+    const {
+      name,
+      lat,
+      lng,
+      notes,
+      mapsUrl,
+      url,
+      date,
+      category,
+      placeId,
+      nameOriginal,
+      location,
+      rating,
+      ratingCount,
+      openingHours,
+      cost,
+      estimatedDuration,
+      description,
+    } = req.body;
 
     const member = await prisma.tripMember.findUnique({
       where: { userId_tripId: { userId: req.userId!, tripId } },
     });
     if (!member) { res.status(403).json({ error: 'אינך חבר בטיול זה' }); return; }
 
-    if (!name?.trim()) { res.status(400).json({ error: 'שם המקום חסר' }); return; }
+    if (!nameOriginal?.trim() && !name?.trim()) {
+      res.status(400).json({ error: 'שם המקום חסר' });
+      return;
+    }
     if (lat == null || lng == null) { res.status(400).json({ error: 'קואורדינטות חסרות' }); return; }
 
-    // NEW SCHEMA: Create Place
+    // Generate Hebrew description if not provided
+    let generatedDescription = description?.trim() || notes?.trim() || null;
+    if (!generatedDescription && placeId) {
+      const { generatePlaceDescription } = await import('../services/ai.service');
+      try {
+        const aiDesc = await generatePlaceDescription({
+          name: nameOriginal?.trim() || name?.trim() || '',
+          location: location?.trim() || null,
+          types: req.body.types || [],
+          rating: rating != null ? Number(rating) : null,
+        });
+        if (aiDesc) generatedDescription = aiDesc;
+      } catch (err) {
+        console.error('[addPlace] Failed to generate description:', err);
+        // Continue without description — not critical
+      }
+    }
+
+    // NEW SCHEMA: Create Place with ALL fields from Google Places API
+    // name = nameOriginal (the official name from Google)
     const place = await prisma.place.create({
       data: {
         tripId,
-        name: name.trim(),
+        name: nameOriginal?.trim() || name.trim(),
+        nameOriginal: nameOriginal?.trim() || name.trim(),
         lat: Number(lat),
         lng: Number(lng),
-        description: notes?.trim() || null,
+        description: generatedDescription,
+        location: location?.trim() || null,
         mapsUrl: mapsUrl?.trim() || null,
         url: url?.trim() || null,
         category: category?.trim() || 'other',
+        placeId: placeId?.trim() || null,
+        openingHours: openingHours || null,
+        rating: rating != null ? Number(rating) : null,
+        ratingCount: ratingCount != null ? Number(ratingCount) : null,
+        cost: cost?.trim() || null,
+        durationMins: estimatedDuration ? parseDurationToMinutes(estimatedDuration) : null,
+        estimatedDuration: estimatedDuration?.trim() || null,
         emoji: '📍',
         color: 'blue',
       },
