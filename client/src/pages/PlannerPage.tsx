@@ -1647,8 +1647,8 @@ const ActivityModal: React.FC<{
   const [error, setError]           = useState('');
   const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [notes, setNotes]       = useState('');
-  const [category, setCategory] = useState('other');
+  const [notes, setNotes]       = useState(activity?.description ?? '');
+  const [category, setCategory] = useState(activity?.category ?? 'other');
   const [saving, setSaving]     = useState(false);
   const [files, setFiles]       = useState<ActivityFile[]>(activity?.files ?? []);
   const [uploading, setUploading] = useState(false);
@@ -1686,9 +1686,21 @@ const ActivityModal: React.FC<{
   };
 
   const handleSave = async () => {
-    // When editing — just close
+    // When editing — save the editable fields
     if (activity) {
-      onClose();
+      setSaving(true);
+      try {
+        await onSave({
+          id: activity.id,
+          name: activity.name,
+          description: notes,
+          category,
+        });
+      } catch {
+        setError('שגיאה בשמירה');
+      } finally {
+        setSaving(false);
+      }
       return;
     }
 
@@ -1791,44 +1803,52 @@ const ActivityModal: React.FC<{
                 <button onClick={() => { setSelected(null); setQuery(''); }} className="text-green-400 text-lg leading-none">×</button>
               </div>
             )}
-            <div>
-              <label className="text-xs font-medium text-neutral-500 mb-1.5 block">הערות (אופציונלי)</label>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                className={`w-full ${inp} resize-none`}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-neutral-500 mb-1.5 block">קטגוריה</label>
-              <div className="flex flex-wrap gap-1.5">
-                {CATS.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setCategory(c.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${
-                      category === c.id
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-neutral-200 text-neutral-600'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {error && !suggestions.length && <p className="text-sm text-red-500">{error}</p>}
           </>
         )}
 
-        {/* When editing existing activity — show all fields */}
+        {/* When editing — place is fixed; show it like the selected-place box */}
+        {activity && (
+          <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
+            <span className="text-lg">{activity.emoji || '📌'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-neutral-900 truncate">{activity.name}</p>
+              {activity.location && <p className="text-xs text-neutral-400 truncate">{activity.location}</p>}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="text-xs font-medium text-neutral-500 mb-1.5 block">הערות (אופציונלי)</label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={2}
+            className={`w-full ${inp} resize-none`}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-neutral-500 mb-1.5 block">קטגוריה</label>
+          <div className="flex flex-wrap gap-1.5">
+            {CATS.map(c => (
+              <button
+                key={c.id}
+                onClick={() => setCategory(c.id)}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${
+                  category === c.id
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-neutral-200 text-neutral-600'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {error && !suggestions.length && <p className="text-sm text-red-500">{error}</p>}
+
+        {/* Files — only when editing */}
         {activity && (
           <>
-            <p className="text-sm text-neutral-600 mb-2">
-              <span className="font-semibold">{activity.name}</span>
-              {activity.location && <span className="text-xs text-neutral-400 block mt-0.5">{activity.location}</span>}
-            </p>
             <div>
               <label className="text-xs text-neutral-500 mb-1.5 block">קבצים מצורפים</label>
               {files.length > 0 && (
@@ -1866,7 +1886,7 @@ const ActivityModal: React.FC<{
           disabled={saving || resolving || (!activity && !selected)}
           className="flex-1 text-sm font-bold bg-brand-500 text-white rounded-xl py-2.5 disabled:opacity-50 hover:bg-brand-600"
         >
-          {saving ? 'שומר...' : activity ? 'סגור' : '+ הוסף פעילות'}
+          {saving ? 'שומר...' : activity ? 'שמור' : '+ הוסף פעילות'}
         </button>
       </div>
     </ModalOverlay>

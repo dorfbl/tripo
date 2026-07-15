@@ -114,9 +114,9 @@ export async function purgeStaleHoursNotifications(opts: {
     ];
 
     const events = eventIds.length
-      ? await prisma.plannerEvent.findMany({
+      ? await prisma.scheduledEvent.findMany({
           where: { id: { in: eventIds }, tripId },
-          include: { item: true, activity: true },
+          include: { place: true },
         })
       : [];
     const byId = new Map(events.map((e) => [e.id, e]));
@@ -162,17 +162,17 @@ export async function purgeStaleHoursNotifications(opts: {
       // Re-validate against current hours (cache per event)
       if (!stillCritical.has(eventId)) {
         try {
-          const act = (ev as any).activity;
+          const act = (ev as any).place;
           const warnings = await checkEventOpeningHours({
-            title: ev.title,
+            title: ev.title || act?.name || '',
             date: ev.date,
             startMinute: ev.startMinute,
             durationMins: ev.durationMins,
             allDay: Boolean(ev.allDay),
-            category: act?.category ?? ev.item?.category ?? null,
-            mapsUrl: ev.item?.mapsUrl ?? ev.mapsUrl ?? act?.mapsUrl ?? null,
-            location: act?.location ?? ev.item?.location ?? null,
-            name: act?.name ?? ev.item?.name ?? ev.title,
+            category: act?.category ?? null,
+            mapsUrl: act?.mapsUrl ?? null,
+            location: act?.location ?? null,
+            name: act?.name ?? ev.title ?? '',
           });
           stillCritical.set(
             eventId,

@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { findOrCreateTripItem, serializeActivity, serializeEvent, updateTripItem } from '../lib/tripItems';
 import {
   checkEventOpeningHours,
   checkEventsOpeningHoursFast,
@@ -28,6 +27,59 @@ async function getTripActivity(tripId: string, activityId: string | null | undef
     where: { id: activityId, tripId },
   });
 }
+
+/** Serialize a Place row to the frontend "activity" shape. */
+const serializePlaceAsActivity = (p: any) => ({
+  id: p.id,
+  tripId: p.tripId,
+  name: p.name,
+  nameOriginal: p.nameOriginal,
+  emoji: p.emoji,
+  location: p.location,
+  description: p.description,
+  durationMins: p.durationMins || 60,
+  estimatedDuration: p.estimatedDuration,
+  cost: p.cost,
+  category: p.category,
+  mapsUrl: p.mapsUrl,
+  url: p.url,
+  color: p.color,
+  placeId: p.placeId,
+  openingHours: p.openingHours,
+  rating: p.rating,
+  ratingCount: p.ratingCount,
+  createdAt: p.createdAt,
+  files: p.files ?? [],
+  votes: p.votes ?? [],
+  item: null, // No longer using TripItem
+});
+
+/** Serialize a ScheduledEvent (with place included) to the frontend "event" shape. */
+const serializeScheduledEvent = (ev: any) => ({
+  id: ev.id,
+  tripId: ev.tripId,
+  activityId: ev.placeId, // Map placeId to activityId for compatibility
+  title: ev.title || ev.place?.name || '',
+  date: ev.date,
+  startMinute: ev.startMinute,
+  durationMins: ev.durationMins,
+  color: ev.color || ev.place?.color || 'blue',
+  notes: ev.notes,
+  allDay: ev.allDay,
+  url: ev.place?.url || null,
+  mapsUrl: ev.place?.mapsUrl || null,
+  cost: ev.place?.cost || null,
+  createdAt: ev.createdAt,
+  updatedAt: ev.updatedAt,
+  files: ev.files ?? [],
+  activity: ev.place ? {
+    id: ev.place.id,
+    name: ev.place.name,
+    category: ev.place.category,
+    location: ev.place.location,
+    mapsUrl: ev.place.mapsUrl,
+  } : null,
+});
 
 async function resolveEventMeta(event: {
   title: string;
@@ -181,56 +233,9 @@ export const getPlanner = async (req: AuthRequest, res: Response): Promise<void>
     ]);
 
     // Convert to old format with ALL Place fields from CSV
-    const activities = places.map((p) => ({
-      id: p.id,
-      tripId: p.tripId,
-      name: p.name,
-      nameOriginal: p.nameOriginal,
-      emoji: p.emoji,
-      location: p.location,
-      description: p.description,
-      durationMins: p.durationMins || 60,
-      estimatedDuration: p.estimatedDuration,
-      cost: p.cost,
-      category: p.category,
-      mapsUrl: p.mapsUrl,
-      url: p.url,
-      color: p.color,
-      placeId: p.placeId,
-      openingHours: p.openingHours,
-      rating: p.rating,
-      ratingCount: p.ratingCount,
-      createdAt: p.createdAt,
-      files: p.files,
-      votes: p.votes,
-      item: null, // No longer using TripItem
-    }));
+    const activities = places.map(serializePlaceAsActivity);
 
-    const serializedEvents = events.map((ev) => ({
-      id: ev.id,
-      tripId: ev.tripId,
-      activityId: ev.placeId, // Map placeId to activityId for compatibility
-      title: ev.title || ev.place?.name || '',
-      date: ev.date,
-      startMinute: ev.startMinute,
-      durationMins: ev.durationMins,
-      color: ev.color || ev.place?.color || 'blue',
-      notes: ev.notes,
-      allDay: ev.allDay,
-      url: ev.place?.url || null,
-      mapsUrl: ev.place?.mapsUrl || null,
-      cost: ev.place?.cost || null,
-      createdAt: ev.createdAt,
-      updatedAt: ev.updatedAt,
-      files: ev.files,
-      activity: ev.place ? {
-        id: ev.place.id,
-        name: ev.place.name,
-        category: ev.place.category,
-        location: ev.place.location,
-        mapsUrl: ev.place.mapsUrl,
-      } : null,
-    }));
+    const serializedEvents = events.map(serializeScheduledEvent);
 
     // Fast path only — Google is used on create/update/check-hours (not on every load)
     const checkInputs = events.map((ev) => ({
@@ -408,30 +413,7 @@ export const createActivity = async (req: AuthRequest, res: Response): Promise<v
       include: { files: true, votes: true },
     });
 
-    res.status(201).json({ activity: {
-      id: place.id,
-      tripId: place.tripId,
-      name: place.name,
-      nameOriginal: place.nameOriginal,
-      emoji: place.emoji,
-      location: place.location,
-      description: place.description,
-      durationMins: place.durationMins,
-      estimatedDuration: place.estimatedDuration,
-      cost: place.cost,
-      category: place.category,
-      mapsUrl: place.mapsUrl,
-      url: place.url,
-      color: place.color,
-      placeId: place.placeId,
-      openingHours: place.openingHours,
-      rating: place.rating,
-      ratingCount: place.ratingCount,
-      createdAt: place.createdAt,
-      files: place.files,
-      votes: place.votes,
-      item: null,
-    }});
+    res.status(201).json({ activity: serializePlaceAsActivity(place) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
 
@@ -443,17 +425,16 @@ export const bulkCreateActivities = async (req: AuthRequest, res: Response): Pro
     if (!Array.isArray(activities) || activities.length === 0) { res.status(400).json({ error: 'invalid' }); return; }
     for (const a of activities) {
       if (!a.name?.trim()) continue;
-      const item = await findOrCreateTripItem(tripId, a, 'activity');
-      await prisma.plannerActivity.create({
+      await prisma.place.create({
         data: {
-          tripId, itemId: item.id, name: item.name, emoji: item.emoji || '📌', location: item.location || null,
-          description: item.description || null, durationMins: item.durationMins ?? 60,
-          cost: item.cost || null, category: item.category || 'other', mapsUrl: item.mapsUrl || null, url: item.url || null, color: item.color || 'blue',
+          tripId, name: a.name.trim(), nameOriginal: a.name.trim(), emoji: a.emoji || '📌', location: a.location || null,
+          description: a.description || null, durationMins: a.durationMins ?? 60,
+          cost: a.cost || null, category: a.category || 'other', mapsUrl: a.mapsUrl || null, url: a.url || null, color: a.color || 'blue',
         },
       });
     }
-    const all = await prisma.plannerActivity.findMany({ where: { tripId }, orderBy: { createdAt: 'asc' }, include: { files: true, item: true } });
-    res.status(201).json({ activities: all.map(serializeActivity) });
+    const all = await prisma.place.findMany({ where: { tripId }, orderBy: { createdAt: 'asc' }, include: { files: true, votes: true } });
+    res.status(201).json({ activities: all.map(serializePlaceAsActivity) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
 
@@ -462,27 +443,25 @@ export const updateActivity = async (req: AuthRequest, res: Response): Promise<v
     const { tripId, actId } = req.params as { tripId: string; actId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
     const { name, emoji, location, description, durationMins, cost, category, mapsUrl, url, color } = req.body;
-    const existing = await prisma.plannerActivity.findFirst({ where: { id: actId, tripId } });
+    const existing = await prisma.place.findFirst({ where: { id: actId, tripId } });
     if (!existing) { res.status(404).json({ error: 'פעילות לא נמצאה' }); return; }
-    const item = await updateTripItem(existing.itemId, tripId, { name, emoji, location, description, durationMins, cost, category, mapsUrl, url, color }, 'activity');
-    const activity = await prisma.plannerActivity.update({
+    const place = await prisma.place.update({
       where: { id: actId },
       data: {
-        itemId: item.id,
-        name: item.name,
-        emoji: item.emoji,
-        location: item.location,
-        description: item.description,
-        durationMins: item.durationMins ?? durationMins ?? existing.durationMins,
-        cost: item.cost,
-        category: item.category,
-        mapsUrl: item.mapsUrl,
-        url: item.url,
-        color: item.color,
+        name: name?.trim() ? name.trim() : existing.name,
+        emoji: emoji ?? existing.emoji,
+        location: location !== undefined ? (location || null) : existing.location,
+        description: description !== undefined ? (description || null) : existing.description,
+        durationMins: durationMins != null ? Number(durationMins) : existing.durationMins,
+        cost: cost !== undefined ? (cost || null) : existing.cost,
+        category: category ?? existing.category,
+        mapsUrl: mapsUrl !== undefined ? (mapsUrl || null) : existing.mapsUrl,
+        url: url !== undefined ? (url || null) : existing.url,
+        color: color ?? existing.color,
       },
-      include: { files: true, item: true },
+      include: { files: true, votes: true },
     });
-    res.json({ activity: serializeActivity(activity) });
+    res.json({ activity: serializePlaceAsActivity(place) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
 
@@ -490,9 +469,9 @@ export const deleteActivity = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { tripId, actId } = req.params as { tripId: string; actId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const existing = await prisma.plannerActivity.findFirst({ where: { id: actId, tripId } });
+    const existing = await prisma.place.findFirst({ where: { id: actId, tripId } });
     if (!existing) { res.status(404).json({ error: 'פעילות לא נמצאה' }); return; }
-    await prisma.plannerActivity.delete({ where: { id: actId } });
+    await prisma.place.delete({ where: { id: actId } });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -515,8 +494,8 @@ export const uploadActivityFile = async (req: AuthRequest, res: Response): Promi
       throw err;
     }
     await recordStorageDelta(req.userId!, req.file.size);
-    const file = await prisma.plannerActivityFile.create({
-      data: { activityId: actId, filename: req.file.filename, originalName: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size },
+    const file = await prisma.placeFile.create({
+      data: { placeId: actId, filename: req.file.filename, originalName: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size },
     });
     res.status(201).json({ file });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
@@ -526,10 +505,10 @@ export const deleteActivityFile = async (req: AuthRequest, res: Response): Promi
   try {
     const { tripId, fileId } = req.params as { tripId: string; fileId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const file = await prisma.plannerActivityFile.findUnique({ where: { id: fileId } });
+    const file = await prisma.placeFile.findUnique({ where: { id: fileId } });
     if (!file) { res.status(404).json({ error: 'קובץ לא נמצא' }); return; }
     try { fs.unlinkSync(path.join('/home/dor/tripo/uploads/planner', file.filename)); } catch { /* ignore */ }
-    await prisma.plannerActivityFile.delete({ where: { id: fileId } });
+    await prisma.placeFile.delete({ where: { id: fileId } });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -792,7 +771,7 @@ export const uploadEventFile = async (req: AuthRequest, res: Response): Promise<
       throw err;
     }
     await recordStorageDelta(req.userId!, req.file.size);
-    const file = await prisma.plannerEventFile.create({
+    const file = await prisma.scheduledEventFile.create({
       data: { eventId, filename: req.file.filename, originalName: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size },
     });
     res.status(201).json({ file });
@@ -803,10 +782,10 @@ export const deleteEventFile = async (req: AuthRequest, res: Response): Promise<
   try {
     const { tripId, fileId } = req.params as { tripId: string; fileId: string };
     if (!await checkMember(tripId, req.userId!)) { res.status(403).json({ error: 'אין גישה' }); return; }
-    const file = await prisma.plannerEventFile.findUnique({ where: { id: fileId } });
+    const file = await prisma.scheduledEventFile.findUnique({ where: { id: fileId } });
     if (!file) { res.status(404).json({ error: 'קובץ לא נמצא' }); return; }
     try { fs.unlinkSync(path.join('/home/dor/tripo/uploads/planner', file.filename)); } catch { /* ignore */ }
-    await prisma.plannerEventFile.delete({ where: { id: fileId } });
+    await prisma.scheduledEventFile.delete({ where: { id: fileId } });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'שגיאה' }); }
 };
@@ -1149,15 +1128,14 @@ export const applyAiSchedule = async (req: AuthRequest, res: Response): Promise<
 
     if (replaceTimed !== false) {
       // Default: replace timed schedule so OK = full AI plan
-      await prisma.plannerEvent.deleteMany({
+      await prisma.scheduledEvent.deleteMany({
         where: { tripId, allDay: false },
       });
     }
 
     const activityIds = [...new Set(slots.map((s) => s.activityId).filter(Boolean))];
-    const acts = await prisma.plannerActivity.findMany({
+    const acts = await prisma.place.findMany({
       where: { tripId, id: { in: activityIds } },
-      include: { item: true },
     });
     const actMap = new Map(acts.map((a) => [a.id, a]));
 
@@ -1169,29 +1147,10 @@ export const applyAiSchedule = async (req: AuthRequest, res: Response): Promise<
       const date = String(s.date).slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
 
-      const item =
-        act.item ||
-        (await findOrCreateTripItem(
-          tripId,
-          {
-            name: act.name,
-            durationMins: act.durationMins,
-            color: act.color,
-            mapsUrl: act.mapsUrl,
-            url: act.url,
-            cost: act.cost,
-            category: act.category,
-            location: act.location,
-            emoji: act.emoji,
-          },
-          'event',
-        ));
-
-      const event = await prisma.plannerEvent.create({
+      const event = await prisma.scheduledEvent.create({
         data: {
           tripId,
-          itemId: item.id,
-          activityId: act.id,
+          placeId: act.id,
           title: act.name,
           date,
           startMinute: allDay ? 0 : Math.max(0, Math.min(1439, Number(s.startMinute) || 0)),
@@ -1201,34 +1160,31 @@ export const applyAiSchedule = async (req: AuthRequest, res: Response): Promise<
           color: act.color || s.color || 'blue',
           notes: s.notes || null,
           allDay,
-          url: act.url || null,
-          mapsUrl: act.mapsUrl || s.mapsUrl || null,
-          cost: act.cost || s.cost || null,
         },
-        include: { files: true, item: true },
+        include: { files: true, place: true },
       });
-      created.push(serializeEvent(event));
+      created.push(serializeScheduledEvent(event));
     }
 
     // Return full planner state
     const [allActs, allEvents] = await Promise.all([
-      prisma.plannerActivity.findMany({
+      prisma.place.findMany({
         where: { tripId },
         orderBy: { createdAt: 'asc' },
-        include: { files: true, item: true },
+        include: { files: true, votes: true },
       }),
-      prisma.plannerEvent.findMany({
+      prisma.scheduledEvent.findMany({
         where: { tripId },
         orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
-        include: { files: true, item: true, activity: true },
+        include: { files: true, place: true },
       }),
     ]);
 
     res.json({
       ok: true,
       created: created.length,
-      activities: allActs.map(serializeActivity),
-      events: allEvents.map(serializeEvent),
+      activities: allActs.map(serializePlaceAsActivity),
+      events: allEvents.map(serializeScheduledEvent),
     });
   } catch (err) {
     console.error('[planner] ai-schedule apply', err);

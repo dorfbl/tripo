@@ -162,10 +162,11 @@ export const createAiRecap = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Optional planner context per day
-    const plannerEvents = await prisma.plannerEvent.findMany({
+    const plannerEvents = await prisma.scheduledEvent.findMany({
       where: { tripId },
       orderBy: [{ date: 'asc' }, { startMinute: 'asc' }],
       take: 100,
+      include: { place: true },
     });
     const plannerByDay: Record<string, string[]> = {};
     for (const pe of plannerEvents) {
@@ -175,7 +176,7 @@ export const createAiRecap = async (req: AuthRequest, res: Response): Promise<vo
       const time = pe.allDay
         ? 'כל היום'
         : `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      plannerByDay[pe.date].push(`${time} ${pe.title}`);
+      plannerByDay[pe.date].push(`${time} ${pe.title || pe.place?.name || ''}`);
     }
 
     // Consume AI quota before calling the model
