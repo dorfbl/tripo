@@ -28,6 +28,24 @@ async function getTripActivity(tripId: string, activityId: string | null | undef
   });
 }
 
+/** One place = one scheduled day: drop the place's events on other days (map sync uses the same rule). */
+async function removeOtherDayEventsForPlace(tripId: string, placeId: string, keepDate: string, excludeEventId?: string) {
+  const stale = await prisma.scheduledEvent.findMany({
+    where: {
+      tripId,
+      placeId,
+      date: { not: keepDate },
+      ...(excludeEventId ? { id: { not: excludeEventId } } : {}),
+    },
+    select: { id: true },
+  });
+  for (const ev of stale) {
+    await prisma.scheduledEvent.delete({ where: { id: ev.id } });
+    try { await clearHoursNotificationsForEvent(tripId, ev.id); } catch { /* ignore */ }
+  }
+  return stale.length;
+}
+
 /** Serialize a Place row to the frontend "activity" shape. */
 const serializePlaceAsActivity = (p: any) => ({
   id: p.id,
@@ -542,6 +560,11 @@ export const createEvent = async (req: AuthRequest, res: Response): Promise<void
       include: { files: true, place: true },
     });
 
+    // One place = one day: scheduling here removes the place's events on other days
+    if (place) {
+      try { await removeOtherDayEventsForPlace(tripId, place.id, event.date, event.id); } catch { /* ignore */ }
+    }
+
     let scheduleWarnings: ScheduleWarning[] = [];
     try {
       scheduleWarnings = await warningsForEvent({
@@ -650,6 +673,11 @@ export const updateEvent = async (req: AuthRequest, res: Response): Promise<void
       },
       include: { files: true, place: true },
     });
+
+    // One place = one day: moving an event drags the place fully to the new day
+    if (event.placeId) {
+      try { await removeOtherDayEventsForPlace(tripId, event.placeId, event.date, event.id); } catch { /* ignore */ }
+    }
 
     let scheduleWarnings: ScheduleWarning[] = [];
     try {
@@ -1140,9 +1168,12 @@ export const applyAiSchedule = async (req: AuthRequest, res: Response): Promise<
     const actMap = new Map(acts.map((a) => [a.id, a]));
 
     const created = [];
+    const scheduledPlaceIds = new Set<string>(); // one place = one day: first slot wins
     for (const s of slots) {
       const act = actMap.get(s.activityId);
       if (!act) continue;
+      if (scheduledPlaceIds.has(act.id)) continue;
+      scheduledPlaceIds.add(act.id);
       const allDay = Boolean(s.allDay);
       const date = String(s.date).slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
@@ -1163,6 +1194,7 @@ export const applyAiSchedule = async (req: AuthRequest, res: Response): Promise<
         },
         include: { files: true, place: true },
       });
+      try { await removeOtherDayEventsForPlace(tripId, act.id, event.date, event.id); } catch { /* ignore */ }
       created.push(serializeScheduledEvent(event));
     }
 

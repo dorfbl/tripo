@@ -922,7 +922,7 @@ export const MapPage: React.FC = () => {
   // Fit to visible places once on initial data load
   useEffect(() => {
     if (!mapReady || !mapRef.current || !window.google || centeredOnce.current) return;
-    const visible = places.filter(p => !p.date || !hiddenDays.has(p.date));
+    const visible = places.filter(p => !hiddenDays.has(p.date ?? 'none'));
     if (!visible.length) return;
     centeredOnce.current = true;
     fitVisible(visible);
@@ -959,8 +959,8 @@ export const MapPage: React.FC = () => {
 
     places.forEach(p => {
       if (!placePosition(p)) return;
+      if (hiddenDays.has(p.date ?? 'none')) return;
       if (!p.date) { undated.push(p); return; }
-      if (hiddenDays.has(p.date)) return;
       const arr = byDay.get(p.date) ?? [];
       arr.push(p);
       byDay.set(p.date, arr);
@@ -985,7 +985,7 @@ export const MapPage: React.FC = () => {
   // Place count per day for the filter panel
   const dayCounts = useMemo(() => {
     const m = new Map<string, number>();
-    places.forEach(p => { if (p.date) m.set(p.date, (m.get(p.date) ?? 0) + 1); });
+    places.forEach(p => { const k = p.date ?? 'none'; m.set(k, (m.get(k) ?? 0) + 1); });
     return m;
   }, [places]);
 
@@ -1020,7 +1020,7 @@ export const MapPage: React.FC = () => {
     const next = new Set(hiddenDays);
     next.has(date) ? next.delete(date) : next.add(date);
     setHiddenDays(next);
-    const visible = places.filter(p => !p.date || !next.has(p.date));
+    const visible = places.filter(p => !next.has(p.date ?? 'none'));
     if (visible.length && mapRef.current && window.google) fitVisible(visible);
   };
 
@@ -1149,7 +1149,7 @@ export const MapPage: React.FC = () => {
                       className="flex-1 py-2 text-xs font-semibold text-brand-500 hover:bg-brand-50 active:bg-brand-100 transition-colors border-l border-neutral-100">
                       הכל
                     </button>
-                    <button onClick={() => setHiddenDays(new Set(tripDays))}
+                    <button onClick={() => setHiddenDays(new Set([...tripDays, 'none']))}
                       className="flex-1 py-2 text-xs font-semibold text-neutral-400 hover:bg-neutral-50 active:bg-neutral-100 transition-colors">
                       ללא
                     </button>
@@ -1167,6 +1167,14 @@ export const MapPage: React.FC = () => {
                       </button>
                     );
                   })}
+                  {(dayCounts.get('none') ?? 0) > 0 && (
+                    <button onClick={() => toggleDay('none')}
+                      className={`flex items-center gap-2.5 px-4 py-2.5 w-full transition-colors hover:bg-neutral-50 active:bg-neutral-100 ${hiddenDays.has('none') ? 'opacity-35' : ''}`}>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: '#9CA3AF' }} />
+                      <span className="text-sm font-semibold text-neutral-800">ללא יום</span>
+                      <span className="text-xs text-neutral-400 ml-1">{dayCounts.get('none')}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
