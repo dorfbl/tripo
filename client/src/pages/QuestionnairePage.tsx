@@ -17,6 +17,9 @@ const VOTE_OPTIONS = [
 
 type VoteId = typeof VOTE_OPTIONS[number]['id'];
 
+/** Fixed parts of the trip (lodging, transfers, airport/car-rental logistics) — not up for a vote */
+const NON_VOTABLE_CATS = ['hotel', 'travel', 'logistics'];
+
 /** Generic category labels — not trip-specific (no מינכן/יער) */
 const CAT_LABELS: Record<string, string> = {
   nature: 'טבע',
@@ -86,7 +89,9 @@ export const QuestionnairePage: React.FC = () => {
       apiClient.get(`/api/planner/${tripId}/votes/mine`),
       apiClient.get(`/api/planner/${tripId}/votes`),
     ]).then(([pr, mr, ar]) => {
-      const acts = pr.data.activities ?? [];
+      const acts = (pr.data.activities ?? []).filter(
+        (a: Activity) => !NON_VOTABLE_CATS.includes(a.category),
+      );
       setActivities(acts);
       setTotalCount(acts.length);
       const mv: Record<string, VoteId> = mr.data.votes ?? {};

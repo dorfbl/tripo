@@ -19,6 +19,7 @@ const PLACE_CATEGORIES = [
   { id: 'nature',     label: 'טבע' },
   { id: 'hotel',      label: 'לינה' },
   { id: 'travel',     label: 'נסיעה' },
+  { id: 'logistics',  label: 'לוגיסטיקה' },
   { id: 'shopping',   label: 'קניות' },
   { id: 'culture',    label: 'תרבות' },
   { id: 'special',    label: 'מיוחד' },
@@ -40,6 +41,8 @@ const getPlaceCategoryMarkerPath = (category?: string | null) => {
       return '<path d="M4 11V5"/><path d="M4 14h16"/><path d="M20 19v-8a3 3 0 0 0-3-3H9v11"/><path d="M4 19v-8"/><path d="M8 8h1"/>';
     case 'travel':
       return '<path d="M5 16h14"/><path d="M7 16l1.2-5.2A3 3 0 0 1 11.1 8h1.8a3 3 0 0 1 2.9 2.8L17 16"/><path d="M7 16v2"/><path d="M17 16v2"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/>';
+    case 'logistics':
+      return '<path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><rect x="5" y="7" width="14" height="13" rx="2"/><path d="M9 11v5"/><path d="M15 11v5"/>';
     case 'shopping':
       return '<path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8a3 3 0 0 1 6 0"/>';
     case 'culture':

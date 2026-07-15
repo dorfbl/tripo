@@ -49,6 +49,7 @@ const CATS = [
   { id: 'hotel',      label: '🏨 לינה',     color: 'blue'   },
   { id: 'shopping',   label: '🛍️ קניות',    color: 'orange' },
   { id: 'travel',     label: '🚐 נסיעה',    color: 'yellow' },
+  { id: 'logistics',  label: '🧳 לוגיסטיקה', color: 'gray'  },
   { id: 'special',    label: '⭐ מיוחד',    color: 'red'    },
   { id: 'other',      label: '📌 כללי',     color: 'gray'   },
 ];
