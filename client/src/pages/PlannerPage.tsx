@@ -1171,11 +1171,11 @@ export const PlannerPage: React.FC = () => {
           defaultColor={modal.type === 'addEvent' ? modal.color : undefined}
           defaultDuration={modal.type === 'addEvent' ? modal.durationMins : undefined}
           defaultActivityId={modal.type === 'addEvent' ? modal.activityId : undefined}
-          defaultUrl={modal.type === 'addEvent' ? modal.url : undefined}
           defaultMapsUrl={modal.type === 'addEvent' ? modal.mapsUrl : undefined}
-          defaultCost={modal.type === 'addEvent' ? modal.cost : undefined}
           defaultCategory={modal.type === 'addEvent' ? modal.category : undefined}
           defaultLocation={modal.type === 'addEvent' ? modal.location : undefined}
+          linkedActivity={activities.find(a => a.id === (modal.type === 'editEvent' ? modal.event.activityId : modal.activityId))}
+          onEditActivity={a => setModal({ type: 'editActivity', activity: a })}
           days={days}
           onSave={saveEvent}
           onDelete={modal.type === 'editEvent' ? deleteEvent : undefined}
@@ -1904,16 +1904,16 @@ const EventModal: React.FC<{
   defaultColor?: string;
   defaultDuration?: number;
   defaultActivityId?: string;
-  defaultUrl?: string;
   defaultMapsUrl?: string;
-  defaultCost?: string;
   defaultCategory?: string;
   defaultLocation?: string;
+  linkedActivity?: Activity;
+  onEditActivity?: (a: Activity) => void;
   days: string[];
   onSave: (data: any) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onClose: () => void;
-}> = ({ tripId, event, defaultDate, defaultStartMinute, defaultTitle, defaultColor, defaultDuration, defaultActivityId, defaultUrl, defaultMapsUrl, defaultCost, defaultCategory, defaultLocation, days, onSave, onDelete, onClose }) => {
+}> = ({ tripId, event, defaultDate, defaultStartMinute, defaultTitle, defaultColor, defaultDuration, defaultActivityId, defaultMapsUrl, defaultCategory, defaultLocation, linkedActivity, onEditActivity, days, onSave, onDelete, onClose }) => {
   const initStart  = event?.startMinute ?? defaultStartMinute ?? 540;
   const initDur    = event?.durationMins ?? defaultDuration ?? 60;
   const initEnd    = initStart + initDur;
@@ -1927,9 +1927,6 @@ const EventModal: React.FC<{
   const [endM,    setEndM]    = useState(String(Math.min(initEnd, 1439) % 60).padStart(2,'0'));
   const [color,   setColor]   = useState(event?.color   ?? defaultColor   ?? 'blue');
   const [notes,   setNotes]   = useState(event?.notes   ?? '');
-  const [url,     setUrl]     = useState(event?.url     ?? defaultUrl     ?? '');
-  const [mapsUrl, setMapsUrl] = useState(event?.mapsUrl ?? defaultMapsUrl ?? '');
-  const [cost,    setCost]    = useState(event?.cost    ?? defaultCost    ?? '');
   const [files,   setFiles]   = useState<EventFile[]>(event?.files ?? []);
   const [saving,  setSaving]  = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -1939,6 +1936,9 @@ const EventModal: React.FC<{
   const startMinute = (parseInt(startH, 10) || 0) * 60 + (parseInt(startM, 10) || 0);
   const endMinute   = (parseInt(endH, 10) || 0) * 60 + (parseInt(endM, 10) || 0);
   const durationMins = Math.max(15, endMinute > startMinute ? endMinute - startMinute : 60);
+
+  // Place-derived context (link/maps/cost live on the place, not the event)
+  const mapsUrl = event?.mapsUrl ?? defaultMapsUrl ?? linkedActivity?.mapsUrl ?? '';
 
   // Live Google + heuristics check whenever schedule fields change
   useEffect(() => {
@@ -1958,8 +1958,8 @@ const EventModal: React.FC<{
           allDay: false,
           activityId: event?.activityId ?? defaultActivityId,
           mapsUrl: mapsUrl.trim() || null,
-          location: defaultLocation || null,
-          category: defaultCategory || null,
+          location: defaultLocation || linkedActivity?.location || null,
+          category: defaultCategory || linkedActivity?.category || null,
         });
         if (!cancelled) setServerWarnings(data.scheduleWarnings ?? []);
       } catch {
@@ -1972,7 +1972,7 @@ const EventModal: React.FC<{
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [tripId, title, date, startMinute, durationMins, allDay, mapsUrl, event?.activityId, defaultActivityId, defaultCategory, defaultLocation]);
+  }, [tripId, title, date, startMinute, durationMins, allDay, mapsUrl, event?.activityId, defaultActivityId, defaultCategory, defaultLocation, linkedActivity]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -1991,10 +1991,7 @@ const EventModal: React.FC<{
         title, date, allDay,
         startMinute: allDay ? 0 : startMinute,
         durationMins: allDay ? 1440 : durationMins,
-        color, notes: notes.trim() || null, url: url.trim() || null,
-        mapsUrl: mapsUrl.trim() || null, cost: cost.trim() || null,
-        category: defaultCategory,
-        location: defaultLocation,
+        color, notes: notes.trim() || null,
       });
     } finally { setSaving(false); }
   };
@@ -2064,6 +2061,20 @@ const EventModal: React.FC<{
         </div>
       )}
       <div className="flex flex-col gap-3">
+        {/* Linked place — same fixed box as the place form */}
+        {linkedActivity && (
+          <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
+            <span className="text-lg">{linkedActivity.emoji || '📌'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-neutral-900 truncate">{linkedActivity.name}</p>
+              {linkedActivity.location && <p className="text-xs text-neutral-400 truncate">{linkedActivity.location}</p>}
+            </div>
+            {onEditActivity && (
+              <button onClick={() => onEditActivity(linkedActivity)} className="text-xs text-brand-500 font-medium hover:text-brand-700 flex-shrink-0">עריכת המקום</button>
+            )}
+          </div>
+        )}
+
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="כותרת *" className={inp} />
 
         <div>
@@ -2105,11 +2116,7 @@ const EventModal: React.FC<{
           </div>
         )}
 
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="🔗 קישור כללי (אופציונלי)" className={inp} />
-        <input value={mapsUrl} onChange={e => setMapsUrl(e.target.value)} placeholder="🗺️ קישור Google Maps (אופציונלי)" className={inp} />
-        <input value={cost} onChange={e => setCost(e.target.value)} placeholder="💰 מחיר (למשל €15, חינם)" className={inp} />
-
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="תיאור (אופציונלי)" rows={2} className={`${inp} resize-none`} />
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="הערות (אופציונלי)" rows={2} className={`${inp} resize-none`} />
 
         <div>
           <label className="text-xs text-neutral-500 mb-1.5 block">צבע</label>
